@@ -424,6 +424,7 @@ function renderAnswer(event) {
   target.replaceChildren();
   const citations = new Map(event.citations.map((citation) => [citation.anchor, citation]));
   let valid = 0;
+  let first = null;
   let unresolvedCount = 0;
   const tokens = /\[\[(\d+)\]\]\(#(pageindex-citation-\d+)\)|\*\*([^*\n]+)\*\*/g;
   let offset = 0;
@@ -441,6 +442,7 @@ function renderAnswer(event) {
         if (doc.flags.length) reference.classList.add("flagged");
         target.append(reference);
         valid++;
+        first ||= [doc, citation.page];
       } else {
         const unresolved = element("span", label + " (source introuvable)", "unresolved");
         target.append(unresolved);
@@ -451,6 +453,8 @@ function renderAnswer(event) {
   }
   target.append(document.createTextNode(event.answer.slice(offset)));
   target.hidden = false;
+  // Open the first cited section so the source (and its agent view) is on screen right away.
+  if (first) showPage(...first);
   const warnings = event.warnings || [];
   $("#warnings").replaceChildren(...warnings.map((warning) => {
     const item = element("li");
