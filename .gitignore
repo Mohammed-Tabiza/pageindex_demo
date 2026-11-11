@@ -1,0 +1,33 @@
+# Tous les répertoires commençant par un point, à toute profondeur.
+.*/
+
+# Configuration privée (le modèle de configuration reste versionné).
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials.json
+serviceAccountKey.json
+
+# Index et résultats propres à ce poste.
+index_manifest.json
+runs/
+
+# Dépendances, caches et sorties de construction.
+__pycache__/
+*.py[cod]
+node_modules/
+build/
+dist/
+coverage/
+*.log
+*.tmp
+*.temp
+*.cache
+*.swp
+
+# Fichiers du système d’exploitation.
+.DS_Store
+Thumbs.db
+desktop.ini

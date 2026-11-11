@@ -1,0 +1,7 @@
+[
+ {"id":"nominal","question":"À quelle fréquence publier un point de situation pour un incident P1 ?","expected":"Toutes les 30 minutes.","sources":["incidents.pdf:3"]},
+ {"id":"renvoi","question":"Incident P1 réel : le responsable d’astreinte ne répond pas depuis 10 minutes. Qui contacter ?","expected":"Le coordinateur de crise.","sources":["incidents.pdf:2","astreintes.pdf:2"]},
+ {"id":"exception","question":"Pendant un EXERCICE P1, le responsable d’astreinte ne répond pas depuis 10 minutes. Qui contacter ?","expected":"Uniquement l’animateur de l’exercice.","sources":["astreintes.pdf:2"]},
+ {"id":"absent","question":"Quel est le numéro de téléphone personnel du coordinateur de crise ?","expected":"Information absente du corpus ; ne pas inventer de numéro.","sources":[]},
+ {"id":"validation","question":"Le demandeur peut-il approuver son propre changement normal ?","expected":"Non ; validation du responsable de service.","sources":["changements.pdf:2"]}
+]

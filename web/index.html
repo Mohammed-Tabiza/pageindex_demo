@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PageIndex · Démonstrateur RAG structurel</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="mark" aria-hidden="true">P</span>PageIndex</div>
+    <span class="top-label">Démonstrateur local</span>
+  </header>
+  <main class="layout">
+    <aside class="panel corpus" aria-labelledby="corpus-title">
+      <div class="section-heading">
+        <h2 id="corpus-title">Corpus fictif</h2>
+        <p id="corpus-status">Chargement de l’index…</p>
+      </div>
+      <div id="documents"></div>
+    </aside>
+
+    <div class="workspace">
+      <section class="scenario" aria-labelledby="scenario-title">
+        <p class="eyebrow">RAG structurel</p>
+        <h1 id="scenario-title">Interroger les procédures</h1>
+        <label for="question-select" class="question-label">Choisir une question</label>
+        <select id="question-select" aria-describedby="question" disabled>
+          <option>Chargement des questions…</option>
+        </select>
+        <p id="question">Chargement de la question…</p>
+        <div class="actions">
+          <button id="run" type="button" class="primary" disabled>Lancer la recherche <span aria-hidden="true">→</span></button>
+          <button id="archive" type="button" class="secondary" hidden>Voir la trace CLI</button>
+        </div>
+      </section>
+
+      <section class="panel response" aria-labelledby="response-title">
+        <div class="section-heading">
+          <h2 id="response-title">Réponse</h2>
+          <p id="run-mode">En attente d’une recherche</p>
+        </div>
+        <div id="status" class="notice" role="status" aria-live="polite">Choisissez une question, puis lancez la recherche pour vérifier la réponse dans les PDF.</div>
+        <div id="answer" class="answer" hidden></div>
+        <div id="source-list" hidden>
+          <h3>Pages récupérées</h3>
+          <div id="sources" class="chips"></div>
+        </div>
+      </section>
+
+      <section class="panel reader" id="reader" aria-labelledby="reader-title" hidden>
+        <div class="section-heading reader-head">
+          <div>
+            <h2 id="reader-title" tabindex="-1">Page source</h2>
+            <p id="reader-location"></p>
+          </div>
+          <a id="reader-pdf" target="_blank" rel="noopener">Ouvrir le PDF ↗</a>
+        </div>
+        <nav id="reader-pages" class="chips" aria-label="Pages du PDF"></nav>
+        <pre id="reader-text"></pre>
+      </section>
+    </div>
+
+    <aside class="panel trace" aria-labelledby="trace-title">
+      <div class="section-heading">
+        <h2 id="trace-title">Trace des appels</h2>
+        <p id="trace-count">En attente d’une recherche</p>
+      </div>
+      <ol id="trace-list"></ol>
+      <div id="trace-empty" class="trace-empty">
+        <p>La trace affiche les appels et leurs résultats à mesure qu’ils arrivent.</p>
+        <dl>
+          <dt><code>get_document_structure</code></dt>
+          <dd>Consulte le sommaire d’un PDF.</dd>
+          <dt><code>get_page_content</code></dt>
+          <dd>Lit le texte des pages ciblées.</dd>
+        </dl>
+      </div>
+    </aside>
+  </main>
+</body>
+</html>
