@@ -3,28 +3,29 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>PageIndex · Démonstrateur RAG structurel</title>
+  <title>PageIndex · Bundle OKF</title>
   <link rel="stylesheet" href="/style.css">
   <script src="/app.js" defer></script>
 </head>
 <body>
   <header class="topbar">
     <div class="brand"><span class="mark" aria-hidden="true">P</span>PageIndex</div>
-    <span class="top-label">Démonstrateur local</span>
+    <span class="top-label">Démonstrateur local · Open Knowledge Format v0.2</span>
   </header>
   <main class="layout">
     <aside class="panel corpus" aria-labelledby="corpus-title">
       <div class="section-heading">
-        <h2 id="corpus-title">Corpus fictif</h2>
+        <h2 id="corpus-title">Bundle OKF fictif</h2>
         <p id="corpus-status">Chargement de l’index…</p>
       </div>
+      <div id="bundle-summary" class="bundle-summary" hidden></div>
       <div id="documents"></div>
     </aside>
 
     <div class="workspace">
       <section class="scenario" aria-labelledby="scenario-title">
         <p class="eyebrow">RAG structurel</p>
-        <h1 id="scenario-title">Interroger les procédures</h1>
+        <h1 id="scenario-title">Interroger la base de connaissances</h1>
         <label for="question-select" class="question-label">Choisir une question</label>
         <select id="question-select" aria-describedby="question" disabled>
           <option>Chargement des questions…</option>
@@ -41,10 +42,11 @@
           <h2 id="response-title">Réponse</h2>
           <p id="run-mode">En attente d’une recherche</p>
         </div>
-        <div id="status" class="notice" role="status" aria-live="polite">Choisissez une question, puis lancez la recherche pour vérifier la réponse dans les PDF.</div>
+        <div id="status" class="notice" role="status" aria-live="polite">Choisissez une question, puis lancez la recherche pour vérifier la réponse dans les concepts OKF.</div>
         <div id="answer" class="answer" hidden></div>
+        <ul id="warnings" class="warnings" aria-label="Avertissements OKF" hidden></ul>
         <div id="source-list" hidden>
-          <h3>Pages récupérées</h3>
+          <h3>Sections récupérées</h3>
           <div id="sources" class="chips"></div>
         </div>
       </section>
@@ -52,13 +54,19 @@
       <section class="panel reader" id="reader" aria-labelledby="reader-title" hidden>
         <div class="section-heading reader-head">
           <div>
-            <h2 id="reader-title" tabindex="-1">Page source</h2>
+            <h2 id="reader-title" tabindex="-1">Concept</h2>
             <p id="reader-location"></p>
           </div>
-          <a id="reader-pdf" target="_blank" rel="noopener">Ouvrir le PDF ↗</a>
+          <div class="reader-actions">
+            <button id="reader-view" type="button" class="chip" aria-pressed="false">Vue agent</button>
+            <a id="reader-source" target="_blank" rel="noopener">Source OKF ↗</a>
+          </div>
         </div>
-        <nav id="reader-pages" class="chips" aria-label="Pages du PDF"></nav>
-        <pre id="reader-text"></pre>
+        <div id="reader-badges" class="badges"></div>
+        <dl id="reader-meta" class="meta"></dl>
+        <nav id="reader-pages" class="chips" aria-label="Sections du concept"></nav>
+        <div id="reader-text" class="markdown"></div>
+        <pre id="reader-agent" hidden></pre>
       </section>
     </div>
 
@@ -72,9 +80,9 @@
         <p>La trace affiche les appels et leurs résultats à mesure qu’ils arrivent.</p>
         <dl>
           <dt><code>get_document_structure</code></dt>
-          <dd>Consulte le sommaire d’un PDF.</dd>
+          <dd>Consulte l’arbre des sections d’un concept, construit depuis ses titres Markdown.</dd>
           <dt><code>get_page_content</code></dt>
-          <dd>Lit le texte des pages ciblées.</dd>
+          <dd>Lit des sections : liens résolus, notes de sources et ligne de statut OKF.</dd>
         </dl>
       </div>
     </aside>

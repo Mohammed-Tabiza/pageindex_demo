@@ -1,4 +1,4 @@
-"""Serve the PageIndex demonstrator on the Windows loopback interface."""
+"""Serve the PageIndex demonstrator for an OKF bundle on the loopback interface."""
 
 import argparse
 import json
@@ -11,7 +11,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
-from demo import ROOT, configuration, indexed_manifest, pageindex_client
+import okf
+from demo import ROOT, bundle_path, configuration, ensure_index, load_questions, pageindex_client
 
 TIMEOUT = 120
 QUERY_LOCK = threading.Lock()
@@ -21,6 +22,12 @@ STATIC = {
     "/app.js": ("app.js", "text/javascript; charset=utf-8"),
     "/style.css": ("style.css", "text/css; charset=utf-8"),
 }
+FLAG_MESSAGES = {
+    "deprecated": "est obsolète (status: deprecated)",
+    "stale": "est périmé (stale_after dépassé)",
+    "draft": "est un brouillon (status: draft)",
+    "unverified": "n’a jamais été vérifié (aucun verified)",
+}
 
 
 def read_json(path):
@@ -28,11 +35,8 @@ def read_json(path):
 
 
 def questions():
-    labels = {"nominal": "Communication", "renvoi": "Renvoi entre procédures",
-              "exception": "Exception : exercice", "absent": "Information absente",
-              "validation": "Validation d’un changement"}
-    return [{"id": q["id"], "label": labels.get(q["id"], q["id"]), "question": q["question"]}
-            for q in read_json(ROOT / "questions.json")]
+    return [{"id": q["id"], "label": q.get("label", q["id"]), "question": q["question"]}
+            for q in load_questions()]
 
 
 def selected_question(case="renvoi"):
@@ -44,21 +48,64 @@ def selected_question(case="renvoi"):
     return question["question"]
 
 
-def corpus(manifest=None):
-    if manifest is None:
-        manifest = indexed_manifest()
-    documents = []
-    for entry in manifest["docs"]:
-        directory = ROOT / ".pageindex" / "docs" / entry["doc_id"]
-        documents.append({
-            "id": entry["doc_id"],
-            "name": entry["file"],
-            "stored_name": read_json(directory / "doc.json")["name"],
-            "tree": read_json(directory / "tree.json"),
-            "pages": {p["page_index"]: p["markdown"] for p in read_json(directory / "pages.json")},
-        })
-    return {"documents": documents, "model": manifest["model"], "question": selected_question(),
-            "questions": questions(), "default_case": "renvoi"}
+def document(bundle, concept, now):
+    """Everything the interface and the source checks need about one concept."""
+    by_concept = {c.id: c.doc_id for c in bundle.concepts.values()}
+    data = okf.rendered(bundle, concept, now)
+    target = okf.replacement(bundle, concept)
+    links = []
+    for link in concept.links:
+        item = link.as_dict()
+        item["target_doc"] = by_concept.get(link.target)
+        links.append(item)
+    return {
+        "id": concept.doc_id,
+        "name": concept.doc_name,
+        "stored_name": concept.doc_name,
+        "concept": concept.id,
+        "path": concept.path,
+        "folder": str(Path(concept.path).parent.as_posix()),
+        "type": concept.type,
+        "title": concept.title,
+        "description": concept.description,
+        "status": concept.status,
+        "trust_tier": concept.trust_tier,
+        "last_verified": concept.last_verified,
+        "generated": concept.generated,
+        "stale": concept.is_stale(now),
+        "stale_after": concept.stale_after,
+        "flags": concept.lifecycle_flags(now),
+        "tags": concept.tags,
+        "resource": concept.frontmatter.get("resource"),
+        "sources": [{key: okf.iso(value) if key == "last_modified" else value
+                     for key, value in source.items()} for source in concept.sources],
+        "superseded_by": target.doc_id if target else None,
+        "tree": data["tree"],
+        "pages": {page["page_index"]: page["markdown"] for page in data["pages"]},
+        "sections": [{"page": s.page, "level": s.level, "title": s.title, "anchor": s.anchor,
+                      "markdown": s.markdown, "footnotes": s.footnotes} for s in concept.sections],
+        "footnotes": concept.footnotes,
+        "links": links,
+    }
+
+
+def corpus():
+    bundle, manifest = ensure_index()
+    now = okf.now_utc()
+    report = okf.report(bundle, now)
+    # Group labels come from the index.md entries that list each directory (§8).
+    folders = {}
+    for directory, body in bundle.indexes.items():
+        for title, href in re.findall(r"^\s*[*-]\s+\[([^\]]+)\]\(([^)\s]+/)\)", body, re.M):
+            path = (Path(directory) / href).as_posix().strip("/").removeprefix("./")
+            folders.setdefault(path, title)
+    documents = [document(bundle, concept, now) for concept in sorted(bundle.concepts.values(), key=lambda c: c.id)]
+    return {"documents": documents, "question": selected_question(), "questions": questions(),
+            "default_case": "renvoi",
+            "bundle": {"okf_version": manifest["okf_version"], "indexer": manifest["indexer"],
+                       "indexed_at": manifest["indexed_at"], "folders": folders,
+                       "report": {key: report[key] for key in ("conformant", "concepts", "sections", "links",
+                                                               "trust", "status", "stale", "errors", "warnings")}}}
 
 
 def error_event(error, stage):
@@ -79,9 +126,9 @@ def error_event(error, stage):
         diagnostic["finish_reason"] = finish
         message = "Le modèle a interrompu la réponse."
     elif stage == "configuration":
-        message = "Vérifiez DEMO_INDEX_MODEL, DEMO_CHAT_MODEL (ou DEMO_MODEL), OPENAI_API_KEY et OPENAI_BASE_URL dans le fichier .env."
+        message = "Vérifiez DEMO_CHAT_MODEL (ou DEMO_MODEL), OPENAI_API_KEY et OPENAI_BASE_URL dans le fichier .env."
     elif stage == "index":
-        message = "Vérifiez le corpus et le modèle, puis réindexez avec uv run .\\demo.py index."
+        message = "Bundle OKF non conforme ou illisible : lancez uv run .\\demo.py lint."
     elif stage == "citations":
         message = "Les citations de la réponse n’ont pas pu être résolues."
     elif status == 429:
@@ -121,46 +168,50 @@ def clean_result(output):
     return {key: output[key] for key in keys if key in output}
 
 
-def referenced_pairs(documents, evidence):
-    pairs = set()
-    referral = r"\b(?:procédure|document|section|voir|consulte\w*|appliqu\w*|renvoi|renvoie|reportez|cf)\b"
-    for (source_id, _), passage in evidence.items():
-        for doc in documents:
-            if doc["id"] == source_id:
+
+
+def followups(documents, cited):
+    """Pages a cited section hands over to, from OKF links and supersession.
+
+    Only links whose sentence is a referral ("appliquer la section Relais de
+    [x](...)") count; a passing mention of another concept does not. A cited
+    deprecated concept always hands over to its replacement.
+    Returns {(source_doc_id, target_doc_id): set of target pages}.
+    """
+    by_id = {doc["id"]: doc for doc in documents}
+    pairs = {}
+    for doc_id, page in cited:
+        doc = by_id.get(doc_id)
+        if doc is None:
+            continue
+        for link in doc.get("links", []):
+            target = by_id.get(link.get("target_doc"))
+            if link.get("section") != page or not link.get("referral") or target is None or target["id"] == doc_id:
                 continue
-            names = {Path(doc["name"]).stem, Path(doc["stored_name"]).stem}
-            mentions = [match for name in names for match in re.finditer(
-                r"(?<!\w)" + re.escape(name) + r"(?!\w)", passage["text"], re.I)]
-            if any(re.search(referral, passage["text"][max(0, match.start() - 80):match.end() + 40], re.I) for match in mentions):
-                pairs.add((source_id, doc["id"]))
+            pages = {link["target_page"]} if link.get("target_page") else set(target["pages"])
+            pairs.setdefault((doc_id, target["id"]), set()).update(pages)
+        replacement = by_id.get(doc.get("superseded_by"))
+        if replacement is not None:
+            anchored = {link["target_page"] for link in doc.get("links", [])
+                        if link.get("target_doc") == replacement["id"] and link.get("target_page")}
+            pairs.setdefault((doc_id, replacement["id"]), set()).update(anchored or set(replacement["pages"]))
     return pairs
 
 
-def section_pages(nodes, text):
-    """Resolve an explicit section title from a cross-reference against the tree."""
-    pages = set()
-    for node in nodes:
-        title = re.sub(r"^[\d.\s)–-]+", "", node["title"]).strip()
-        if len(title) >= 4 and re.search(r"(?<!\w)" + re.escape(title) + r"(?!\w)", text, re.I):
-            start, end = node["start_index"], node["end_index"]
-            if 0 <= end - start < 10:
-                pages.update(range(start, end + 1))
-        pages.update(section_pages(node.get("nodes", []), text))
-    return pages
+def cited_pages(resolved):
+    return {(c.get("doc_id"), c.get("page")) for c in resolved.get("citations", [])}
 
 
 def retrieve_sources(client, resolved, documents, evidence, attempt):
-    """Read cited pages and explicit section references through the real SDK."""
+    """Read cited pages and the sections they hand over to, through the real SDK."""
     by_id = {doc["id"]: doc for doc in documents}
     attempted = set(evidence)
     added = False
+    cited = cited_pages(resolved)
     while True:
-        requested = {(c.get("doc_id"), c.get("page")) for c in resolved.get("citations", [])}
-        for source_id, target_id in referenced_pairs(documents, evidence):
-            target = by_id[target_id]
-            for (doc_id, _), passage in list(evidence.items()):
-                if doc_id == source_id:
-                    requested.update((target_id, page) for page in section_pages(target.get("tree", []), passage["text"]))
+        requested = set(cited)
+        for (_, target_id), pages in followups(documents, cited & set(evidence)).items():
+            requested.update((target_id, page) for page in pages)
         pending = {}
         for doc_id, page in requested - attempted:
             doc = by_id.get(doc_id)
@@ -185,7 +236,7 @@ def retrieve_sources(client, resolved, documents, evidence, attempt):
 
 
 def answer_issues(resolved, documents, evidence):
-    """Check source coverage, not semantic truth or the reference answer."""
+    """Check source coverage and OKF lifecycle, not semantic truth or the reference answer."""
     issues = []
     by_id = {doc["id"]: doc for doc in documents}
     cited = set()
@@ -202,10 +253,31 @@ def answer_issues(resolved, documents, evidence):
             issues.append(f'Lisez la page {page} de {doc["stored_name"]} avant de la citer.')
         else:
             cited.add(doc["id"])
-    required = {target_id for _, target_id in referenced_pairs(documents, evidence)}
-    for doc_id in sorted(required - cited):
-        issues.append(f'Suivez le renvoi : lisez les pages pertinentes de {by_id[doc_id]["stored_name"]} et citez-les dans la réponse finale.')
+    for (source_id, target_id), _ in sorted(followups(documents, cited_pages(resolved)).items()):
+        if target_id in cited or source_id not in cited:
+            continue
+        source, target = by_id[source_id], by_id[target_id]
+        if source.get("superseded_by") == target_id:
+            issues.append(f'{source["stored_name"]} est obsolète : n’appliquez pas sa règle, appuyez la réponse sur '
+                          f'{target["stored_name"]} et citez-le.')
+        else:
+            issues.append(f'Suivez le renvoi : lisez les pages pertinentes de {target["stored_name"]} et citez-les dans la réponse finale.')
     return list(dict.fromkeys(issues))
+
+
+def okf_warnings(resolved, documents):
+    """OKF §10.5 gate, advisory: surface the lifecycle of every cited concept."""
+    by_id = {doc["id"]: doc for doc in documents}
+    warnings = []
+    for doc_id in dict.fromkeys(c.get("doc_id") for c in resolved.get("citations", [])):
+        doc = by_id.get(doc_id)
+        if doc is None:
+            continue
+        for flag in doc.get("flags", []):
+            detail = f' depuis le {doc["stale_after"][:10]}' if flag == "stale" and doc.get("stale_after") else ""
+            warnings.append({"doc_id": doc_id, "flag": flag,
+                             "message": f'Le concept {doc["concept"]} {FLAG_MESSAGES[flag]}{detail}.'})
+    return warnings
 
 
 def query_events(case="renvoi"):
@@ -215,9 +287,9 @@ def query_events(case="renvoi"):
         question = selected_question(case)
         index_model, model, key, url = configuration()
         stage = "index"
-        manifest = indexed_manifest(index_model)
-        ids = [entry["doc_id"] for entry in manifest["docs"]]
-        documents = corpus(manifest)["documents"]
+        data = corpus()
+        documents = data["documents"]
+        ids = [doc["id"] for doc in documents]
         by_name = {name: doc for doc in documents for name in (doc["name"], doc["stored_name"])}
         stage = "generation"
         client = pageindex_client(index_model, model, key, url)
@@ -231,8 +303,12 @@ def query_events(case="renvoi"):
         evidence = {}
         instructions = (
             "Réponds directement à la question, sans préambule ni annonce de recherche. "
-            "Lis les pages sources, pas seulement leurs résumés. Lorsqu’un passage renvoie à un autre "
-            "document accessible, consulte ce document jusqu’à trouver la règle et ses exceptions. "
+            "Chaque document est un concept OKF et chaque page une section ; lis les pages, pas seulement les résumés. "
+            "La première ligne de chaque page donne le statut, la confiance et la fraîcheur du concept : "
+            "n’applique pas la règle d’un concept OBSOLÈTE, suis son remplaçant ; avertis l’utilisateur "
+            "lorsqu’une information provient d’un concept PÉRIMÉ ou d’un BROUILLON. "
+            "Les liens annotés {→ document, page} désignent la section cible : lorsqu’une section y renvoie, "
+            "consulte-la jusqu’à trouver la règle et ses exceptions. "
             "Ne termine pas par une invitation à consulter un document que tu peux lire. "
             "Cite les pages qui portent le renvoi et celles qui permettent de répondre. "
             "Utilise exactement les noms des documents des outils dans les balises de citation. "
@@ -279,7 +355,7 @@ def query_events(case="renvoi"):
             if new_sources and attempt == 0:
                 issues.append("Les pages originales viennent d’être récupérées. Utilisez leurs textes ci-dessous pour rédiger la réponse finale et appliquer les exceptions.")
             if not issues:
-                yield {"type": "answer", **resolved}
+                yield {"type": "answer", **resolved, "warnings": okf_warnings(resolved, documents)}
                 return
             if attempt == 0:
                 yield {"type": "status", "message": "La recherche est incomplète. Le modèle poursuit la lecture et vérifie les citations…"}
@@ -391,17 +467,19 @@ class Handler(BaseHTTPRequestHandler):
                     self.send_json(404, {"message": "Aucune trace CLI archivée pour cette question."})
                 else:
                     self.send_json(200, {"run": archive.name, "case": case, "events": list(archived_events(archive))})
-            elif url.path == "/api/pdf":
+            elif url.path == "/api/concept":
+                # Raw OKF source (frontmatter included), served as plain text.
                 doc_id = parse_qs(url.query).get("doc", [""])[0]
-                entry = next((d for d in indexed_manifest()["docs"] if d["doc_id"] == doc_id), None)
-                if entry is None:
-                    self.send_json(404, {"message": "Document introuvable."})
+                bundle = okf.load_bundle(bundle_path())
+                concept = bundle.by_doc_id().get(doc_id)
+                if concept is None:
+                    self.send_json(404, {"message": "Concept introuvable."})
                 else:
-                    self.send_data(200, "application/pdf", (ROOT / "data" / entry["file"]).read_bytes())
+                    self.send_data(200, "text/plain; charset=utf-8", (bundle.root / concept.path).read_bytes())
             else:
                 self.send_json(404, {"message": "Page introuvable."})
         except (OSError, ValueError, KeyError):
-            self.send_json(409, {"message": "Index indisponible ou corpus modifié. Lancez uv run .\\demo.py index, puis rechargez la page."})
+            self.send_json(409, {"message": "Bundle OKF illisible ou non conforme. Lancez uv run .\\demo.py lint, corrigez les erreurs, puis rechargez la page."})
 
     def do_POST(self):
         if not self.local_host() or self.headers.get("Origin") not in {None, f"http://{self.headers.get('Host')}"}:

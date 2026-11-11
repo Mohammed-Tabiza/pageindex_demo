@@ -9,13 +9,15 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
 
+import demo
 import web
 
 
 class QuestionTests(unittest.TestCase):
     def test_public_questions_contain_only_reader_fields(self):
         questions = web.questions()
-        self.assertEqual({q['id'] for q in questions}, {'nominal', 'renvoi', 'exception', 'absent', 'validation'})
+        self.assertEqual({q['id'] for q in questions}, {'nominal', 'renvoi', 'exception', 'absent', 'validation',
+                                                        'obsolete', 'perime', 'brouillon'})
         self.assertTrue(all(set(q) == {'id', 'label', 'question'} for q in questions))
         for invalid in ('unknown', '../renvoi', None, ['renvoi']):
             with self.subTest(invalid=invalid), self.assertRaises(ValueError):
@@ -28,7 +30,6 @@ class QuestionTests(unittest.TestCase):
                 client = Mock()
                 client.chat.return_value = stream
                 with patch.object(web, 'configuration', return_value=('index', 'chat', 'key', 'http://localhost/v1')), \
-                     patch.object(web, 'indexed_manifest', return_value={'docs': []}), \
                      patch.object(web, 'corpus', return_value={'documents': []}), \
                      patch.object(web, 'pageindex_client', return_value=client):
                     events = list(web.query_events(question['id']))
@@ -48,7 +49,8 @@ class QuestionTests(unittest.TestCase):
         self.assertEqual(popen.call_args.args[0][-2:], ['--case', 'validation'])
 
     def test_archives_are_scoped_to_the_selected_question(self):
-        with tempfile.TemporaryDirectory() as directory, patch.object(web, 'ROOT', Path(directory)):
+        with tempfile.TemporaryDirectory() as directory, patch.object(web, 'ROOT', Path(directory)), \
+             patch.object(demo, 'ROOT', Path(directory)), patch.dict('os.environ', {'DEMO_QUESTIONS': ''}):
             (Path(directory) / 'questions.json').write_text(json.dumps([
                 {'id': 'renvoi', 'question': 'Renvoi ?'}, {'id': 'exception', 'question': 'Exercice ?'}]), encoding='utf-8')
             for case in ('renvoi', 'exception'):

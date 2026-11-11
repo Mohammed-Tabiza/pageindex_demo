@@ -1,9 +1,7 @@
-"""Offline regression checks for separate indexing and generation models."""
-import hashlib
+"""Offline regression checks: configuration, CLI routing and web generation."""
 import json
 import os
 import shutil
-import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -28,9 +26,9 @@ class ConfigurationTests(unittest.TestCase):
         self.assertEqual(self.config(DEMO_MODEL='old', DEMO_INDEX_MODEL=INDEX,
                                      DEMO_CHAT_MODEL=CHAT), (INDEX, CHAT, 'test-key', URL))
 
-    def test_legacy_model_remains_a_fallback_for_each_role(self):
+    def test_index_model_is_optional_because_okf_indexing_is_deterministic(self):
+        self.assertEqual(self.config(DEMO_CHAT_MODEL=CHAT)[:2], (CHAT, CHAT))
         self.assertEqual(self.config(DEMO_MODEL=INDEX)[:2], (INDEX, INDEX))
-        self.assertEqual(self.config(DEMO_MODEL=INDEX, DEMO_CHAT_MODEL=CHAT)[:2], (INDEX, CHAT))
 
     def test_missing_or_placeholder_model_is_rejected(self):
         for values in ({'DEMO_INDEX_MODEL': INDEX},
@@ -49,103 +47,100 @@ class ConfigurationTests(unittest.TestCase):
 
 
 class ModelRoutingTests(unittest.TestCase):
+    """A temporary copy of the demo bundle, with the SDK client replaced by a double."""
+
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
         self.root = Path(self.directory.name)
-        (self.root / 'data').mkdir()
-        shutil.copyfile(demo.ROOT / 'data' / 'astreintes.pdf', self.root / 'data' / 'astreintes.pdf')
-        self.manifest = {'model': 'gemma4:e4b', 'docs': [{
-            'file': 'astreintes.pdf', 'doc_id': 'existing-doc',
-            'sha256': hashlib.sha256((self.root / 'data' / 'astreintes.pdf').read_bytes()).hexdigest(),
-        }]}
-        demo.write(self.root / 'index_manifest.json', self.manifest)
-        demo.write(self.root / 'questions.json', [{
-            'id': 'renvoi', 'question': 'Question test', 'expected': 'Réponse test', 'sources': [],
-        }])
-        directory = self.root / '.pageindex' / 'docs' / 'existing-doc'
-        directory.mkdir(parents=True)
-        demo.write(directory / 'doc.json', {'name': 'astreintes_1.pdf'})
-        demo.write(directory / 'tree.json', [])
-        demo.write(directory / 'pages.json', [{'page_index': 2, 'markdown': 'Texte source.'}])
+        shutil.copytree(demo.ROOT / 'bundle', self.root / 'bundle')
+        shutil.copyfile(demo.ROOT / 'questions.json', self.root / 'questions.json')
         self.addCleanup(patch.stopall)
+        patch.dict(os.environ, {'DEMO_NOW': '2026-11-11T12:00:00Z'}).start()
+        for name in ('DEMO_BUNDLE', 'DEMO_QUESTIONS'):
+            os.environ.pop(name, None)
         patch.object(demo, 'ROOT', self.root).start()
         patch.object(web, 'ROOT', self.root).start()
         patch.object(demo, 'configuration', return_value=(INDEX, CHAT, 'test-key', URL)).start()
         patch.object(web, 'configuration', return_value=(INDEX, CHAT, 'test-key', URL)).start()
         self.client = Mock()
-        self.client.submit_document.return_value = {'doc_id': 'new-doc'}
-        self.client.get_tree.return_value = []
         self.client.chat.return_value = ['Réponse test']
         self.factory = Mock(return_value=self.client)
-        patch.dict(sys.modules, {'pageindex': SimpleNamespace(PageIndexClient=self.factory)}).start()
+        patch.object(demo, 'pageindex_client', self.factory).start()
+        patch.object(web, 'pageindex_client', self.factory).start()
 
-    def run_action(self, action):
+    def run_action(self, action, case='renvoi'):
         output = self.root / action
-        demo.worker(SimpleNamespace(action=action, case='renvoi', output=str(output)))
-        config = self.factory.call_args.kwargs
-        self.assertEqual(config['index']['model'], INDEX)
-        self.assertEqual(config['chat']['model'], CHAT)
+        demo.worker(SimpleNamespace(action=action, case=case, output=str(output)))
         return output
 
-    def test_existing_index_can_be_queried_with_cloud_model(self):
+    def doc(self, concept):
+        return next(d for d in web.corpus()['documents'] if d['concept'] == concept)
+
+    def test_ask_queries_every_concept_with_generation_model(self):
         output = self.run_action('ask')
-        self.client.submit_document.assert_not_called()
-        self.assertEqual(self.client.chat.call_args.kwargs['doc_id'], ['existing-doc'])
+        self.assertEqual(self.factory.call_args.args[1], CHAT)
+        manifest = json.loads((self.root / 'index_manifest.json').read_text(encoding='utf-8'))
+        self.assertEqual(self.client.chat.call_args.kwargs['doc_id'], [d['doc_id'] for d in manifest['docs']])
+        self.assertEqual(len(manifest['docs']), 11)
         meta = json.loads((output / 'metadata.json').read_text(encoding='utf-8'))
-        self.assertEqual(meta['model'], CHAT)
-        self.assertEqual(meta['index_model'], 'gemma4:e4b')
+        self.assertEqual((meta['model'], meta['indexer'], meta['okf_version']), (CHAT, 'okf-pageindex/1', '0.2'))
 
-    def test_new_manifest_records_indexing_model(self):
-        self.run_action('index')
-        manifest = demo.indexed_manifest(INDEX)
-        self.assertEqual(manifest['index_model'], INDEX)
-        self.assertEqual(manifest['model'], INDEX)
-        self.client.chat.assert_not_called()
+    def test_index_makes_no_llm_call_and_is_incremental(self):
+        demo.index(self.root / 'run1')
+        self.factory.assert_not_called()
+        self.assertTrue((self.root / 'run1' / 'procedures.incident-p1_tree.json').is_file())
+        _, manifest = demo.ensure_index()
+        self.assertEqual(manifest['changed'], [])
+        path = self.root / 'bundle' / 'procedures' / 'incident-p1.md'
+        path.write_text(path.read_text(encoding='utf-8').replace('30 minutes', '20 minutes'), encoding='utf-8')
+        _, manifest = demo.ensure_index()
+        self.assertEqual(manifest['changed'], ['procedures/incident-p1'])
 
-    def test_changed_indexing_model_or_corpus_still_requires_reindexing(self):
-        with self.assertRaisesRegex(ValueError, 'indexation modifié'):
-            demo.indexed_manifest(CHAT)
-        (self.root / 'data' / 'astreintes.pdf').write_bytes(b'changed')
-        with self.assertRaisesRegex(ValueError, 'Corpus modifié'):
-            demo.indexed_manifest(INDEX)
-
-    def test_baseline_uses_generation_model(self):
+    def test_baseline_uses_generation_model_and_whole_bundle(self):
         completion = Mock(return_value=SimpleNamespace(
             choices=[SimpleNamespace(message=SimpleNamespace(content='Réponse test'))], usage=None))
-        with patch.dict(sys.modules, {'litellm': SimpleNamespace(completion=completion)}):
+        with patch.object(demo, 'llm_completion', completion):
             self.run_action('baseline')
         self.assertEqual(completion.call_args.kwargs['model'], CHAT)
+        prompt = completion.call_args.kwargs['messages'][1]['content']
+        self.assertIn('SOURCE procedures.astreinte-relais.md', prompt)
+        self.assertIn('status: deprecated', prompt)
 
     def test_web_uses_generation_model_without_local_reasoning_override(self):
+        relais = self.doc('procedures/astreinte-relais')
         stream = Mock()
         stream.events = [
             {'type': 'answer', 'delta': 'Je vais analyser les documents. '},
             {'type': 'tool_call', 'name': 'get_page_content', 'call_id': 'read',
-             'arguments': {'doc_name': 'astreintes_1.pdf', 'pages': '2'}},
+             'arguments': {'doc_name': relais['name'], 'pages': '2'}},
             {'type': 'tool_result', 'name': 'get_page_content', 'call_id': 'read',
-             'output': {'success': True, 'doc_name': 'astreintes_1.pdf',
-                        'content': [{'page': 2, 'text': 'Texte source.'}]}},
+             'output': {'success': True, 'doc_name': relais['name'],
+                        'content': [{'page': 2, 'text': relais['pages'][2]}]}},
             {'type': 'answer', 'delta': 'Réponse test'},
         ]
         self.client.chat.return_value = stream
         self.client.resolve_citations.return_value = {'answer': 'Réponse test', 'citations': [
-            {'document': 'astreintes_1.pdf', 'doc_id': 'existing-doc', 'page': 2,
+            {'document': relais['name'], 'doc_id': relais['id'], 'page': 2,
              'anchor': 'pageindex-citation-01', 'index': 1},
         ]}
         events = list(web.query_events())
         self.assertEqual([event['type'] for event in events], ['start', 'tool_call', 'tool_result', 'answer'])
+        self.assertEqual(events[-1]['warnings'], [])
         self.assertEqual(self.client.resolve_citations.call_args.args[0], 'Réponse test')
         self.assertFalse(events[0]['reasoning_disabled'])
         self.assertNotIn('reasoning_effort', self.client.chat.call_args.kwargs)
-        config = self.factory.call_args.kwargs
-        self.assertEqual((config['index']['model'], config['chat']['model']), (INDEX, CHAT))
+        self.assertEqual(self.factory.call_args.args[:2], (INDEX, CHAT))
         stream.close.assert_called_once()
 
-    def test_corpus_exposes_stored_name_for_tool_results(self):
-        document = web.corpus()['documents'][0]
-        self.assertEqual(document['name'], 'astreintes.pdf')
-        self.assertEqual(document['stored_name'], 'astreintes_1.pdf')
+    def test_corpus_exposes_okf_signals(self):
+        documents = {d['concept']: d for d in web.corpus()['documents']}
+        deprecated = documents['procedures/escalade-p1-v1']
+        self.assertEqual(deprecated['name'], 'procedures.escalade-p1-v1.md')
+        self.assertEqual(deprecated['superseded_by'], documents['procedures/astreinte-relais']['id'])
+        self.assertEqual(documents['procedures/communication-crise']['flags'], ['stale'])
+        self.assertEqual(documents['procedures/changement-urgent']['flags'], ['draft', 'unverified'])
+        self.assertEqual(documents['roles/coordinateur-crise']['trust_tier'], 'human-reviewed')
 
     def test_web_explains_payment_refusal_without_exposing_provider_details(self):
         error = RuntimeError('Provider response with confidential-token')

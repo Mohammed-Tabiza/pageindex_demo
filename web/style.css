@@ -180,3 +180,45 @@ code { font-family: "IBM Plex Mono", Consolas, monospace; font-size: .77rem; ove
   .workspace { grid-row: 1; }
   .trace { grid-column: 1; }
 }
+
+/* OKF: badges, bundle summary, concept reader. */
+.badges { display: flex; flex-wrap: wrap; gap: .3rem; align-items: center; }
+.badge { display: inline-block; padding: .1rem .42rem; border-radius: .36rem; font-size: .68rem; font-weight: 650; white-space: nowrap; background: #eeedf4; color: #4a4560; }
+.badge.type { background: var(--tint); color: #3e2993; }
+.badge.ok { background: #e8f6ee; color: #1d5d3d; }
+.badge.info { background: #e6f0fb; color: #1d4a7a; }
+.badge.warn { background: #fff1dc; color: #763f0c; }
+.badge.bad { background: #fde6e6; color: #8a1f1f; }
+.badge.tag { background: transparent; border: 1px solid var(--line); color: var(--muted); font-weight: 500; }
+.bundle-summary { display: grid; gap: .45rem; padding: .8rem 1rem; border-bottom: 1px solid var(--line); font-size: .78rem; color: var(--muted); }
+.lint summary { color: #763f0c; font-weight: 650; }
+.lint ul { margin: .4rem 0 0; padding-left: 1rem; }
+.folder + .folder { margin-top: .9rem; }
+.folder > h3 { margin: 0 0 .4rem .2rem; font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.document > summary .badges { justify-content: end; }
+.document.muted > summary > span { color: var(--muted); text-decoration: line-through; }
+.reader-actions { display: flex; align-items: center; gap: .75rem; }
+.reader-actions a { font-size: .83rem; font-weight: 650; }
+#reader-view[aria-pressed="true"] { background: var(--accent); color: #fff; }
+#reader-badges { padding: .9rem 1.1rem 0; }
+.meta { display: grid; grid-template-columns: max-content 1fr; gap: .3rem .9rem; margin: 0; padding: .8rem 1.1rem; font-size: .8rem; border-bottom: 1px solid var(--line); }
+.meta dt { color: var(--muted); font-weight: 650; }
+.meta dd { margin: 0; overflow-wrap: anywhere; }
+.sources { margin: 0; padding-left: 1rem; }
+.sources li.cited { font-weight: 650; }
+.sources small { white-space: normal; font-weight: 400; }
+.markdown { padding: 1rem 1.1rem 1.2rem; font-size: .93rem; line-height: 1.65; overflow-wrap: anywhere; }
+.markdown h3, .markdown h4, .markdown h5, .markdown h6 { font-size: 1.05rem; margin: 0 0 .5rem; }
+.markdown p, .markdown ul, .markdown ol, .markdown pre, .table-wrap { margin: 0 0 .7rem; }
+.markdown pre, #reader-agent { padding: .7rem; background: #f6f5fb; border-radius: .5rem; white-space: pre-wrap; font-size: .82rem; }
+#reader-agent { margin: 1rem 1.1rem 1.2rem; font-family: "IBM Plex Mono", Consolas, monospace; line-height: 1.55; overflow-wrap: anywhere; }
+.table-wrap { overflow-x: auto; }
+.markdown table { border-collapse: collapse; font-size: .82rem; }
+.markdown th, .markdown td { border: 1px solid var(--line); padding: .3rem .5rem; text-align: left; vertical-align: top; }
+.inline-link { padding: 0; border: 0; background: none; color: var(--accent); font-weight: 600; text-decoration: underline; text-underline-offset: .22em; }
+.broken-link { color: #763f0c; text-decoration: underline dotted; }
+.footnote-ref { color: var(--accent); font-size: .7rem; }
+.footnotes { margin: 1rem 0 0; padding: .7rem 0 0 1.2rem; border-top: 1px solid var(--line); font-size: .78rem; color: var(--muted); }
+.warnings { margin: 0 1.1rem 1rem; padding: .7rem .9rem; list-style: none; background: #fff8ec; border-radius: .6rem; font-size: .84rem; line-height: 1.5; }
+.warnings li + li { margin-top: .35rem; }
+.chip.flagged, .citation.flagged { background: #fff1dc; color: #763f0c; }

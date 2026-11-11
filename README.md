@@ -1,21 +1,57 @@
-# Démonstrateur PageIndex — procédures IT fictives
+# Démonstrateur PageIndex — bundle OKF de procédures IT fictives
 
-Kit préparé le 11 novembre 2026. SDK officiel PageIndex 0.5.3. La configuration uv utilise Python 3.13 ou ultérieur.
+Le corpus est un **bundle [Open Knowledge Format](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md) (OKF) v0.2**. Il remplace les trois PDF de la première version. Un bundle OKF est un dossier de concepts Markdown avec un frontmatter YAML, reliés par des liens Markdown. Il fournit aussi des métadonnées de provenance, de confiance et de cycle de vie. Les bases de connaissances des agents s'organisent de plus en plus ainsi : wikis versionnés dans Git, souvent rédigés ou mis à jour par des agents.
+
+Kit mis à jour le 11 novembre 2026. SDK officiel PageIndex 0.5.3, Python 3.13 ou ultérieur via uv.
 
 ## Ce que vous allez voir
 
-Trois PDF textuels de quatre pages chacun, cinq questions et leurs réponses de référence :
-- règle simple : fréquence des points de situation ;
-- renvoi entre deux documents : escalade après 10 minutes ;
-- exception : un exercice appelle l'animateur, pas le coordinateur de crise ;
-- absence : aucun numéro personnel n'existe dans le corpus ;
-- validation : le demandeur ne peut pas approuver son propre changement.
+Le dossier `bundle/` contient 11 concepts répartis en 25 sections et reliés par 14 liens. On y trouve aussi les fichiers réservés `index.md` et `log.md`. Tout est fictif.
 
-Le script utilise le vrai SDK pour indexer les PDF, exporter les arbres puis interroger les documents. Le mode `check` contrôle seulement les données et leurs références ; ce n'est pas un moteur RAG ni une simulation. Les documents sont stockés localement, mais leur contenu est transmis à l'endpoint LLM configuré. Aucun service PageIndex Cloud n'est utilisé par notre configuration.
+```
+bundle/
+  index.md                    okf_version: "0.2", liste des groupes
+  log.md                      journal daté (§9)
+  procedures/  index.md, incident-p1.md, astreinte-relais.md, communication-crise.md,
+               escalade-p1-v1.md (obsolète), changement-normal.md, changement-urgent.md (brouillon)
+  roles/       index.md, coordinateur-crise.md, responsable-astreinte.md, animateur-exercice.md, responsable-service.md
+  services/    index.md, orion.md
+```
 
-## Installation Windows / PowerShell sans Docker
+Huit questions (`questions.json`), avec leurs réponses de référence :
 
-### Depuis un clonage neuf
+| Cas | Ce qui est testé |
+|---|---|
+| `nominal` | règle simple : fréquence des points de situation |
+| `renvoi` | lien OKF d'un concept vers la section d'un autre (`/procedures/astreinte-relais.md#relais`) |
+| `exception` | un exercice appelle l'animateur, pas le coordinateur de crise |
+| `absent` | aucun numéro personnel n'existe dans le bundle |
+| `validation` | le demandeur ne peut pas approuver son propre changement |
+| `obsolete` | piège : un concept `status: deprecated` donne une ancienne règle (15 min, directeur) |
+| `perime` | la seule source est périmée (`stale_after` dépassé) : répondre **en le signalant** |
+| `brouillon` | la seule source est un brouillon non vérifié (`status: draft`, aucun `verified`) |
+
+Les trois derniers cas sont nouveaux. Ils reproduisent une difficulté des bases réelles : une information présente n'est pas forcément en vigueur ni fiable.
+
+## Ce que le démonstrateur fait d'un bundle OKF
+
+| OKF v0.2 | Utilisation ici |
+|---|---|
+| Concept (`.md` + frontmatter, ID = chemin sans `.md`) | un document PageIndex, nommé `procedures.incident-p1.md` (le SDK interdit `/`) |
+| Titres Markdown du corps | l'arbre PageIndex ; **chaque section devient une « page »**, donc une citation désigne une section |
+| `type`, `title`, `description`, `tags` | description et métadonnées visibles par l'agent dans `browse_documents` et `get_document` |
+| `verified` (§5.2–5.3) | niveau de confiance : `human-reviewed`, `machine-confirmed` ou `unverified` |
+| `status`, `stale_after` (§5.4–5.5) | indicateurs OBSOLÈTE, BROUILLON et PÉRIMÉ, recalculés à chaque requête |
+| `sources` et notes `[^id]` (§5.1) | chaque page lue par l'agent se termine par les sources des affirmations citées (URL, auteur, date) |
+| Liens `/chemin.md#ancre` (§6) | annotés `{→ document, page N}` dans le texte de l'agent ; l'application suit les **renvois** cités |
+| `index.md`, `log.md` (§8–9) | validés ; libellés des groupes dans l'interface |
+| `superseded_by` (clé producteur, §4.1) | un concept obsolète cité impose de citer son remplaçant |
+
+**Indexation sans LLM.** Le SDK 0.5.3 n'accepte que des PDF en mode local. Or un bundle OKF est déjà structuré. `okf.py` construit donc lui-même l'arbre, les pages et les résumés de façon déterministe, puis les dépose dans le stockage local du SDK (`pageindex.local_store.DocStore`). La recherche, les outils de l'agent et la résolution des citations restent ceux du SDK. L'indexation est **incrémentale** : seuls les concepts modifiés, ajoutés ou supprimés sont réécrits. Un concept qui devient périmé est aussi réécrit. La synchronisation est relancée automatiquement avant chaque question, en CLI comme dans l'interface web.
+
+**Contrôles avant publication d'une réponse** (`web.py`). Le serveur relit les sections citées. Il suit les liens de **renvoi** (« appliquer la section Relais de [relais d'astreinte](…) ») et les remplacements des concepts obsolètes, mais pas les simples mentions. Il refuse une réponse qui s'appuie seulement sur un concept obsolète ou qui ne cite pas la cible d'un renvoi cité. Dans ce cas, il relance une fois le modèle avec les passages récupérés. Une réponse publiée affiche des **avertissements OKF** pour chaque concept cité périmé, en brouillon, obsolète ou non vérifié, dans l'esprit du « gate » décrit au §10.5 de la spécification. Ces contrôles portent sur la couverture et le cycle de vie des sources, pas sur la vérité des affirmations. Aucune réponse de référence n'est transmise au modèle.
+
+## Installation (Windows / PowerShell, sans Docker)
 
 Prérequis : Git, uv et Python 3.13 ou ultérieur. Configurez un endpoint LLM autorisé ; pour Ollama local, installez Ollama et le modèle choisi.
 
@@ -23,146 +59,113 @@ Prérequis : Git, uv et Python 3.13 ou ultérieur. Configurez un endpoint LLM au
 git clone https://github.com/Mohammed-Tabiza/pageindex_demo.git
 cd pageindex_demo
 uv sync --locked
-Copy-Item .env.example .env
-notepad .env
-```
-
-Après avoir renseigné `.env` selon les exemples ci-dessous :
-
-```powershell
 uv run .\demo.py check
-uv run .\demo.py index --timeout 600
-uv run .\web.py
-```
-
-Les répertoires dont le nom commence par un point sont exclus de Git, ainsi que `.env`, les résultats de `runs/` et `index_manifest.json`. Chaque clonage doit créer son propre environnement et son index. `.env.example`, `.gitignore` et `.python-version` sont des fichiers de configuration versionnés.
-
-Pour les contrôles hors ligne : `uv run python -m unittest test_models test_retrieval test_web_questions -v`.
-
-### Interface web avec uv
-
-Dans le dossier du projet, lancez le serveur web. La recherche en direct utilise le serveur du modèle configuré dans `.env`.
-
-Le menu « Choisir une question » propose les cinq cas du corpus : communication, renvoi entre procédures, exception pendant un exercice, information absente et validation d’un changement. La question complète s’affiche sous le menu ; cliquez sur « Lancer la recherche » pour l’envoyer au modèle. Changer de question efface la réponse et la trace précédentes. Le choix est désactivé pendant une recherche. Le bouton de trace CLI, lorsqu’une archive existe, affiche uniquement celle de la question sélectionnée. Les réponses de référence de `questions.json` ne sont pas envoyées au navigateur ni au modèle.
-
-```powershell
-uv run .\web.py
-```
-
-Ouvrez [http://127.0.0.1:8765](http://127.0.0.1:8765). Le serveur utilise la bibliothèque standard de Python et les dépendances du projet. Avec l’index déjà créé, le sommaire, les pages et les traces CLI archivées sont consultables sans appeler le modèle.
-
-Si l’index manque ou que les PDF ont changé, configurez `.env`, lancez `uv run .\demo.py index`, puis rechargez la page. L’option `--port` permet de changer le port d’écoute.
-
-#### Diagnostic du cas « renvoi »
-
-- L’interface associe les documents à leur identifiant et au nom réellement stocké par le SDK (`incidents_1.pdf`, par exemple), tout en affichant le nom du PDF d’origine. Les textes intermédiaires suivis d’un appel d’outil ne sont pas affichés comme une réponse finale.
-- L’essai navigateur du 11 novembre 2026 avec `gemma4:31b-cloud` a répondu « contacter le coordinateur de crise », avec l’exception de l’exercice, et deux citations ouvrant `incidents.pdf` p. 2 et `astreintes.pdf` p. 2. Le PDF cité a également été servi avec HTTP 200. Les 14 tests hors ligne couvrent notamment la poursuite d’un renvoi, les noms suffixés, la lecture des pages citées et le rejet d’une réponse dont les sources restent incomplètes. Commande : `uv run python -m unittest test_models test_retrieval -v`.
-- Avant d’afficher une réponse, le serveur récupère les pages citées via le SDK et suit les renvois explicites vers une section d’un autre document du corpus. Ces lectures sont distinguées des appels du modèle dans la trace. Si des passages ont été ajoutés ou que le parcours reste incomplet, il transmet les textes récupérés au modèle pour une seconde recherche/synthèse. Les citations doivent correspondre à des pages du corpus effectivement récupérées, notamment dans les documents visés par les renvois explicites. Le document intermédiaire peut rester consultable parmi les pages récupérées sans être cité dans la conclusion. Un échec après cette seconde tentative reste signalé comme incomplet. Ce contrôle vérifie la couverture des sources, pas la vérité de chaque affirmation ; aucune réponse de référence n’est transmise au modèle.
-- Si le journal affiche `http_status: 402`, le fournisseur refuse la requête pour paiement requis. Pour un modèle Ollama Cloud, vérifiez les crédits et l’offre du compte connecté à Ollama. Le statut HTTP 200 de `/api/query` signifie que le flux web est ouvert ; un événement d’erreur peut ensuite signaler le refus du modèle. L’index existant peut être conservé.
-- La trace CLI du 11 novembre 2026 contient deux appels réussis à `get_document_structure` et deux à `get_page_content`. Les pages 2 d’`incidents.pdf` et d’`astreintes.pdf` ont été récupérées. `execution.json` enregistre le code 1 et la trace se termine après les résultats d’outils. Le journal Ollama enregistre trois réponses HTTP 200 sur `/v1/chat/completions` pendant cette exécution.
-- La relance avec PageIndex 0.5.3 et `gemma4:e4b` a reproduit `PageIndexAPIError` avec `finish_reason=length`. Le dernier appel a consommé 4 096 jetons, dont 3 873 d’entrée et 223 de raisonnement. PageIndex signale alors une réponse inachevée. Les deux pages avaient déjà été transmises au modèle.
-- Pour les modèles locaux `gemma4:*` (hors variantes cloud) sur Ollama au port 11434, l’interface web transmet `reasoning_effort="none"` pour la recherche. Le réglage est affiché à l’écran et s’applique uniquement à cette requête web. L’essai a généré la réponse attendue et cité les deux pages. [Documentation Ollama](https://github.com/ollama/ollama/blob/main/docs/api/openai-compatibility.mdx)
-
-### Ligne de commande
-
-Décompresser l'archive puis ouvrir PowerShell dans le dossier `pageindex_demo`.
-
-```powershell
-py -3.13 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-.\.venv\Scripts\python.exe demo.py check
+uv run .\demo.py index
 Copy-Item .env.example .env
 notepad .env
+uv run .\web.py
 ```
+
+`check`, `lint` et `index` fonctionnent hors ligne, sans clé ni appel LLM. Seules les questions (`ask`, `baseline`, interface web) appellent le modèle configuré. Sous Linux/WSL, remplacez `.\demo.py` par `demo.py`.
+
+Contrôles hors ligne (43 tests) :
+
+```powershell
+uv run python -m unittest test_okf test_models test_retrieval test_web_questions -v
+```
+
+### Configuration `.env`
 
 Compléter `.env` localement, sans coller de clé dans le chat :
-- `OPENAI_API_KEY` : clé de votre endpoint autorisé ; pour un serveur sans authentification, une valeur factice uniquement si sa configuration le permet ;
+- `OPENAI_API_KEY` : clé de votre endpoint autorisé ; pour un serveur sans authentification, une valeur factice si sa configuration le permet ;
 - `OPENAI_BASE_URL` : URL de base réelle, incluant `/v1` si requis ;
-- `DEMO_INDEX_MODEL` : modèle utilisé pour indexer les PDF ;
-- `DEMO_CHAT_MODEL` : modèle utilisé pour explorer les documents et générer les réponses, ainsi que pour la baseline.
+- `DEMO_CHAT_MODEL` : modèle qui explore les concepts et rédige les réponses, aussi utilisé pour la baseline ;
+- `DEMO_INDEX_MODEL` : facultatif depuis le passage à OKF, car l'indexation n'appelle plus de LLM. S'il est vide, il reprend `DEMO_CHAT_MODEL`. `DEMO_MODEL` reste un repli commun ;
+- `DEMO_BUNDLE`, `DEMO_QUESTIONS` : facultatifs, pour utiliser votre propre bundle (voir plus bas) ;
+- `DEMO_NOW` : facultatif. Instant ISO 8601 (`2026-11-11T12:00:00Z`) qui fige la date du calcul de fraîcheur, pour rejouer une démonstration à l'identique.
 
-Pour indexer avec Gemma local et répondre avec Gemma Cloud via votre serveur Ollama :
+Exemple Ollama, avec réponses par un modèle cloud :
 
 ```dotenv
 OPENAI_API_KEY=ollama
 OPENAI_BASE_URL=http://localhost:11434/v1
-DEMO_INDEX_MODEL=openai/gemma4:e4b
 DEMO_CHAT_MODEL=openai/gemma4:31b-cloud
 ```
 
-Votre serveur Ollama doit être connecté à un compte disposant d’un accès et de crédits pour le modèle cloud. L’indexation utilise le modèle local ; les questions transmettent les passages au modèle cloud. Ces réglages s’appliquent à la CLI et à l’interface web ; redémarrez le serveur web après modification.
+Utilisez les noms LiteLLM `openai/NOM_DU_MODELE` pour un endpoint compatible OpenAI. Les variables déjà définies dans PowerShell ont priorité sur `.env`. Redémarrez le serveur web après modification. La compatibilité du modèle avec les outils reste à vérifier : une API dite compatible OpenAI ne suffit pas à la garantir. Ne désactivez pas TLS ; configurez proxy et certificats via les mécanismes approuvés de votre environnement.
 
-`DEMO_MODEL` reste compatible avec l’ancienne configuration : il sert de repli pour chaque modèle non renseigné. Utilisez les noms LiteLLM `openai/NOM_DU_MODELE` pour un endpoint compatible OpenAI. Changer uniquement `DEMO_CHAT_MODEL` ne nécessite pas de réindexer. Le manifeste vérifie le modèle d’indexation et les empreintes des PDF ; les anciens manifestes sont acceptés, y compris sans le préfixe `openai/`. Les métadonnées des réponses enregistrent les deux modèles.
-
-Pour générer localement, la fenêtre de 4 096 jetons d’Ollama peut saturer dès que les consignes, les outils et les pages récupérées sont réunis. Le fichier `Modelfile.gemma4-16k` prépare une variante des mêmes poids avec 16 384 jetons de contexte et un plafond de sortie de 2 048 jetons :
+## Utiliser votre propre bundle OKF
 
 ```powershell
-ollama create gemma4:e4b-pageindex-16k -f .\Modelfile.gemma4-16k
+# Conformité OKF v0.2 (§11) et recommandations (§5–§10) ; code de sortie 1 si non conforme.
+uv run .\demo.py lint --bundle C:\chemin\vers\mon-bundle
 ```
 
-Utilisez ensuite `DEMO_CHAT_MODEL=openai/gemma4:e4b-pageindex-16k` dans `.env`, en conservant `DEMO_INDEX_MODEL` pour réutiliser l’index. Le contexte agrandi utilise davantage de mémoire. Après une requête, `ollama ps` permet de vérifier le contexte effectivement chargé. L’API compatible OpenAI ne permet pas de régler la fenêtre de contexte par `max_tokens` ; cette valeur concerne la sortie. [Documentation Ollama](https://docs.ollama.com/api/openai-compatibility#setting-the-local-context-size)
+Sont des **erreurs**, conformément au §11 : un concept sans frontmatter YAML lisible, un `type` absent ou vide, un `index.md` portant un frontmatter autre que `okf_version` à la racine, un titre de date non ISO dans `log.md`. Sont de simples **avertissements**, jamais bloquants : liens cassés, ancres introuvables, acteurs hors convention (`human:`, `process:`, `agent/version`), dates sans fuseau, `sources` sans `resource`, notes `[^id]` sans source correspondante, `status` inconnu, ancien champ v0.1 `timestamp`. Les types inconnus et les clés supplémentaires sont acceptés. Les fichiers et dossiers dont le nom commence par un point sont ignorés.
 
-Cette démo ne démontre pas une économie de jetons : une capture hors ligne du premier appel a mesuré environ 4 100 caractères de consignes, 3 900 caractères de schémas d’outils et 1 600 caractères de catalogue et de question, avant de lire les pages. Ces longueurs sont des caractères, pas des jetons Gemma. Les résultats d’outils grossissent ensuite l’historique, et la vérification des sources peut entraîner un second appel. Sur 12 pages, la baseline en contexte complet peut être plus simple et moins coûteuse ; il faut mesurer les deux approches pour conclure.
+Pour interroger votre bundle, définissez `DEMO_BUNDLE` (ou passez `--bundle`) et fournissez un fichier de questions `DEMO_QUESTIONS` au même format que `questions.json`. Les sources s'écrivent `id/du/concept#ancre-de-section`, l'ancre étant celle de GitHub, accents conservés. Lancez ensuite `demo.py check`, puis `demo.py index`. Un bundle non conforme n'est pas indexé.
 
-Les variables déjà définies dans PowerShell ont priorité sur `.env`.
-La compatibilité du modèle avec les outils et les réponses structurées reste à vérifier. Une API dite compatible OpenAI ne suffit pas à garantir le fonctionnement. Ne pas désactiver TLS. Configurer proxy et certificats via les mécanismes approuvés de votre environnement.
+## Interface web
 
 ```powershell
-# Indexation : peut appeler le LLM, avec une limite globale de 10 minutes.
-.\.venv\Scripts\python.exe demo.py index --timeout 600
-# Cas nominal avec renvoi, arbre et appels d'outils visibles.
-.\.venv\Scripts\python.exe demo.py ask --case renvoi
-# Même question avec les 12 pages dans le contexte, même modèle.
-.\.venv\Scripts\python.exe demo.py baseline --case renvoi
-# Échec révélateur attendu : constater l'absence, ne pas inventer.
-.\.venv\Scripts\python.exe demo.py ask --case absent
-# Exception à ne pas manquer.
-.\.venv\Scripts\python.exe demo.py ask --case exception
+uv run .\web.py
 ```
 
-Sous Linux/WSL : `python3 -m venv .venv`, puis utiliser `.venv/bin/python` au lieu de `.\.venv\Scripts\python.exe`. L'activation de l'environnement n'est pas nécessaire.
+Ouvrez [http://127.0.0.1:8765](http://127.0.0.1:8765). Le serveur n'écoute que sur la boucle locale et utilise la bibliothèque standard.
 
-## Résultats et traces
+- **Colonne de gauche** : synthèse de conformité (version OKF, niveaux de confiance, concepts obsolètes, périmés ou en brouillon, avertissements de validation), puis les concepts groupés selon `index.md`, avec leurs badges et leur arbre de sections.
+- **Lecteur de concept** : badges (type, statut, confiance, tags), métadonnées (fraîcheur, auteur, remplaçant, sources avec indicateurs de crédibilité), rendu Markdown de la section. Les liens internes ouvrent directement la section cible. La **Vue agent** montre le texte exact transmis à PageIndex : ligne de statut, liens annotés et sources résolues. **Source OKF ↗** affiche le fichier brut.
+- **Réponse** : les citations ouvrent la section citée. Un encadré d'**avertissements OKF** apparaît si un concept cité est périmé, obsolète, en brouillon ou non vérifié.
+- **Trace** : appels `get_document_structure` et `get_page_content`. Les lectures faites par l'application pour vérifier les sources sont distinguées de celles du modèle.
 
-Chaque exécution crée un dossier distinct dans `runs/` :
-- index : `*_tree.json`, manifeste et empreintes des PDF ;
-- interrogation PageIndex : `trace.txt` (appels/outils et réponse, sans affichage du raisonnement interne), `metadata.json` (modèle de génération dans `model`, modèle d’indexation dans `index_model`) et `execution.json` ;
+Le menu propose les huit questions. Les réponses de référence ne sont envoyées ni au navigateur ni au modèle. Le bouton de trace CLI, lorsqu'une archive existe, affiche celle de la question sélectionnée.
+
+## Ligne de commande
+
+```powershell
+uv run .\demo.py index                      # synchronise l'index et exporte les arbres dans runs/
+uv run .\demo.py ask --case renvoi          # agent PageIndex, appels d'outils visibles
+uv run .\demo.py baseline --case renvoi     # même modèle, bundle complet (frontmatter compris) en contexte
+uv run .\demo.py ask --case obsolete        # le modèle doit écarter la règle obsolète
+uv run .\demo.py ask --case perime          # le modèle doit signaler la fiche périmée
+uv run .\demo.py ask --case absent          # abstention attendue, aucun numéro inventé
+```
+
+Chaque exécution crée un dossier dans `runs/` :
+- index : un `*_tree.json` par concept, `index_manifest.json` (empreintes, concepts modifiés ou supprimés), `okf_report.json` ;
+- interrogation : `trace.txt` (outils et réponse, sans le raisonnement interne), `metadata.json`, `execution.json` ;
 - baseline : `answer.txt`, consommation retournée par le fournisseur et durée ;
 - durée dépassée : statut TIMEOUT et code 124, sans verdict de qualité.
 
-Les résultats des outils peuvent être tronqués à 4 000 caractères dans la trace. Les arbres sont conservés séparément. Le script ne calcule pas un score de vérité automatique : remplir `evaluation.csv` après lecture de la réponse finale et des pages citées. La présence d'une citation ne garantit pas qu'elle justifie la réponse.
+Le script ne calcule pas de score automatique. Remplissez `evaluation.csv` après lecture de la réponse et des sections citées ; la colonne `statut_okf_signale` indique si la réponse a mentionné l'obsolescence, la péremption ou le brouillon. La CLI autorise huit tours d'agent et 120 s par défaut (`--timeout`). L'interface web autorise deux recherches de huit tours, dans un délai global de 120 s. Ces limites ne plafonnent pas la facturation : fixez un quota côté fournisseur si possible.
 
-Limiter d'abord le test à une question. La CLI autorise huit tours d’agent par interrogation. L’interface web autorise jusqu’à deux recherches de huit tours chacune, dans un délai global de 120 secondes. Le timeout CLI est également de 120 secondes par défaut (modifiable). Les limites ne sont pas un plafond de facturation : fixer, si disponible, un quota côté fournisseur. Budget exploratoire proposé : 10 euros, à contrôler hors script. L'arrêt local ne révoque pas les requêtes déjà reçues côté serveur.
+## Diagnostic
 
-## Démonstration en cinq minutes
-
-Pré-indexer avant la présentation ; le temps d'indexation reste mesuré séparément.
-- 0:00–0:45 : ouvrir `astreintes.pdf`, rappeler le caractère fictif et la question.
-- 0:45–1:30 : montrer un arbre exporté et la baseline document complet.
-- 1:30–3:00 : lancer `ask --case renvoi`, observer les outils puis vérifier la source.
-- 3:00–4:15 : lancer `ask --case absent` ou `exception` ; analyser l'abstention ou l'erreur.
-- 4:15–5:00 : distinguer ce qui a été observé de ce qui reste non démontré.
+- `http_status: 402` : le fournisseur refuse la requête pour paiement requis. Vérifiez les crédits du compte (Ollama Cloud, par exemple). L'index peut être conservé.
+- `finish_reason=length` : la fenêtre de contexte ou le plafond de sortie est atteint. Ollama limite le contexte à 4 096 jetons par défaut. `Modelfile.gemma4-16k` prépare une variante à 16 384 jetons : `ollama create gemma4:e4b-pageindex-16k -f .\Modelfile.gemma4-16k`, puis `DEMO_CHAT_MODEL=openai/gemma4:e4b-pageindex-16k`. [Documentation Ollama](https://docs.ollama.com/api/openai-compatibility#setting-the-local-context-size)
+- Pour les modèles locaux `gemma4:*` (hors variantes cloud) sur Ollama au port 11434, l'interface web transmet `reasoning_effort="none"`. Le réglage est affiché à l'écran.
+- « Bundle OKF non conforme » : lancez `demo.py lint` et corrigez les erreurs listées.
+- L'historique des essais de la version PDF (11 novembre 2026) est résumé dans `BILAN.md` et dans l'historique Git.
 
 ## Protocole et limites
 
-Question : sur ce petit corpus, l'agent retrouve-t-il les bonnes preuves et sait-il constater une absence ?
-Critères proposés : quatre réponses présentes correctes avec pages pertinentes, aucune invention pour la question absente, durée sous 120 s. Répéter les cinq questions trois fois avec chacune des deux approches (30 interrogations). Conserver le même corpus et le même modèle de génération pour PageIndex et la baseline ; consigner séparément le modèle d’indexation. La configuration interne des appels PageIndex n'est pas identique à un unique appel de baseline. Ce n'est donc pas une ablation scientifique stricte.
+Question : sur ce bundle, l'agent retrouve-t-il les bonnes preuves, suit-il les renvois, écarte-t-il les règles obsolètes, signale-t-il les sources périmées ou non validées, et sait-il constater une absence ?
 
-**Le protocole initial de comparaison avec un RAG vectoriel n'est pas réalisé dans ce kit minimal.** La baseline choisie est le contexte complet, plus simple sur 12 pages. Ce corpus court démontre le mécanisme ; il ne prouve aucun gain de passage à l'échelle, de coût, de conformité ou de précision sur des procédures réelles. Élargir ensuite à des documents plus longs, des titres ambigus et un vrai RAG de référence.
+Répéter les huit questions trois fois avec chacune des deux approches (48 interrogations), avec le même bundle et le même modèle de génération. La configuration interne des appels PageIndex n'est pas identique à un unique appel de baseline : ce n'est pas une ablation stricte.
+
+Ce que le kit **ne démontre pas** : un gain de coût ou de précision à grande échelle (11 concepts tiennent largement en contexte complet), la comparaison avec un RAG vectoriel, la qualité des résumés (ici extractifs, sans LLM), ni les *Attested Computations* OKF (§10). Celles-ci sont validées (`runtime` requis) mais ne sont pas exécutées. La détection des renvois repose sur des verbes français et anglais courants (« appliquer », « suivre », « voir », « remplacé », « see »…) : elle est à ajuster pour un autre vocabulaire. La fraîcheur dépend de l'horloge du poste, ou de `DEMO_NOW`.
 
 ## Reproductibilité et nettoyage
 
-`requirements.txt` fixe les deux dépendances directes. `requirements-lock.txt` contient toutes les versions installées lors du contrôle Linux/Python 3.12 ; ce gel n'est pas une garantie de compatibilité Windows. Les PDF sont déjà fournis. Pour les régénérer : `python build_corpus.py`, puis réindexer. Le script refuse les PDF dont l'empreinte a changé depuis l'indexation.
-
-Ctrl+C arrête la commande. Les dossiers `.pageindex` et `runs`, ainsi que `index_manifest.json`, peuvent être supprimés pour repartir à zéro. Ne supprimez pas `.env` sans conserver votre configuration dans votre gestionnaire habituel. Ne partagez jamais `.env`.
+`pyproject.toml` et `uv.lock` fixent les dépendances (`pageindex`, `pyyaml`). `requirements-lock.txt` reste un gel indicatif d'un contrôle Linux. Les dossiers `.pageindex` et `runs`, ainsi que `index_manifest.json`, peuvent être supprimés pour repartir de zéro : `demo.py index` les reconstruit en quelques millisecondes. Ne partagez jamais `.env`.
 
 ## Sources primaires
 
 Consultées le 11 novembre 2026 :
+- https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md (OKF v0.2)
 - https://github.com/VectifyAI/PageIndex
 - https://pageindex.ai/docs/sdk/client
-- https://pageindex.ai/docs/sdk/documents
 - https://pageindex.ai/docs/sdk/chat
 - https://pypi.org/pypi/pageindex/0.5.3/json
 
-La distribution officielle a été téléchargée et ses signatures utiles inspectées avant les contrôles. Le SDK tiers reste soumis à sa licence MIT ; il n'est pas recopié dans ce dépôt.
+Le SDK tiers reste soumis à sa licence MIT ; il n'est pas recopié dans ce dépôt.
