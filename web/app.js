@@ -87,7 +87,7 @@ function linkTarget(doc, page, href) {
 // Minimal, DOM-only markdown rendering: no HTML from documents is ever interpreted.
 function inline(text, doc, page) {
   const fragment = document.createDocumentFragment();
-  const tokens = /\[\^([^\]\s]+)\]|\[([^\]]*)\]\(([^)\s]+)\)|\*\*([^*]+)\*\*|`([^`]+)`/g;
+  const tokens = /\[\^([^\]\s]+)\]|\[([^\]]*)\]\(([^)\s]+)\)|\*\*([^*]+)\*\*|`([^`]+)`|(?<![\w*])\*(?![\s*])([^*\n]+?)\*(?![\w*])/g;
   let offset = 0;
   for (const match of text.matchAll(tokens)) {
     fragment.append(document.createTextNode(text.slice(offset, match.index)));
@@ -110,8 +110,10 @@ function inline(text, doc, page) {
       }
     } else if (match[4]) {
       fragment.append(element("strong", match[4]));
-    } else {
+    } else if (match[5]) {
       fragment.append(element("code", match[5]));
+    } else {
+      fragment.append(element("em", match[6]));
     }
     offset = match.index + match[0].length;
   }
@@ -426,12 +428,14 @@ function renderAnswer(event) {
   let valid = 0;
   let first = null;
   let unresolvedCount = 0;
-  const tokens = /\[\[(\d+)\]\]\(#(pageindex-citation-\d+)\)|\*\*([^*\n]+)\*\*/g;
+  const tokens = /\[\[(\d+)\]\]\(#(pageindex-citation-\d+)\)|\*\*([^*\n]+)\*\*|(?<![\w*])\*(?![\s*])([^*\n]+?)\*(?![\w*])/g;
   let offset = 0;
   for (const match of event.answer.matchAll(tokens)) {
     target.append(document.createTextNode(event.answer.slice(offset, match.index)));
     if (match[3]) {
       target.append(element("strong", match[3]));
+    } else if (match[4]) {
+      target.append(element("em", match[4]));
     } else {
       const citation = citations.get(match[2]);
       const doc = citation && findDocument(citation.document, citation.doc_id);
