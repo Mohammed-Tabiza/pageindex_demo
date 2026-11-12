@@ -51,6 +51,29 @@
         </div>
       </section>
 
+      <section class="panel graph" aria-labelledby="graph-title">
+        <details id="graph-panel" open>
+          <summary class="section-heading graph-head">
+            <div>
+              <h2 id="graph-title">Graphe des concepts</h2>
+              <p id="graph-caption">Liens Markdown entre concepts OKF · cliquez un nœud pour l’ouvrir</p>
+            </div>
+          </summary>
+          <div class="graph-wrap"><svg id="graph" role="img" aria-labelledby="graph-title graph-caption"></svg></div>
+          <ul class="graph-legend" aria-label="Légende du graphe">
+            <li><span class="key node procedures"></span>Procédure</li>
+            <li><span class="key node roles"></span>Rôle</li>
+            <li><span class="key node services"></span>Service</li>
+            <li><span class="key edge referral"></span>Renvoi (« appliquer », « voir »…)</li>
+            <li><span class="key edge mention"></span>Simple mention</li>
+            <li><span class="key edge supersede"></span>Remplacé par</li>
+            <li><span class="key ring explored"></span>Exploré</li>
+            <li><span class="key ring read"></span>Section lue</li>
+            <li><span class="key ring cited"></span>Cité</li>
+          </ul>
+        </details>
+      </section>
+
       <section class="panel reader" id="reader" aria-labelledby="reader-title" hidden>
         <div class="section-heading reader-head">
           <div>

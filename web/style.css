@@ -222,3 +222,53 @@ code { font-family: "IBM Plex Mono", Consolas, monospace; font-size: .77rem; ove
 .warnings { margin: 0 1.1rem 1rem; padding: .7rem .9rem; list-style: none; background: #fff8ec; border-radius: .6rem; font-size: .84rem; line-height: 1.5; }
 .warnings li + li { margin-top: .35rem; }
 .chip.flagged, .citation.flagged { background: #fff1dc; color: #763f0c; }
+
+/* Concept graph */
+.graph > details > summary { list-style: none; }
+.graph-head h2::before { content: "›"; display: inline-block; margin-right: .4rem; color: var(--accent); transition: transform .15s; }
+.graph details[open] .graph-head h2::before { transform: rotate(90deg); }
+.graph details:not([open]) .graph-head { border-bottom: 0; }
+.graph-wrap { padding: .4rem .6rem 0; }
+#graph { display: block; width: 100%; height: auto; font-family: inherit; }
+#graph .edge { stroke-width: 1.6; fill: none; transition: opacity .15s; }
+#graph .edge.referral { stroke: #6a4fd8; }
+#graph .edge.mention { stroke: #a9a5bd; stroke-dasharray: 4 4; }
+#graph .edge.supersede { stroke: #c0392b; stroke-dasharray: 7 4; stroke-width: 2; }
+#graph marker.referral path { fill: #6a4fd8; }
+#graph marker.mention path { fill: #a9a5bd; }
+#graph marker.supersede path { fill: #c0392b; }
+#graph .node { cursor: pointer; transition: opacity .15s; }
+#graph .node circle.core { stroke: #fff; stroke-width: 2.5; }
+#graph .node.procedures circle.core { fill: #5b43c7; }
+#graph .node.roles circle.core { fill: #1f8a70; }
+#graph .node.services circle.core { fill: #c27c0e; }
+#graph .node.other circle.core { fill: #6d6987; }
+#graph .node.deprecated { opacity: .55; }
+#graph .node.deprecated text.label { text-decoration: line-through; }
+#graph .node circle.flag { fill: none; stroke-width: 2.5; stroke-dasharray: 3 3; }
+#graph .node.stale circle.flag, #graph .node.draft circle.flag { stroke: #d9822b; }
+#graph .node.deprecated circle.flag { stroke: #c0392b; }
+#graph .node circle.state { fill: none; stroke-width: 4; opacity: 0; transition: opacity .2s, stroke .2s; }
+#graph .node.explored circle.state { opacity: 1; stroke: #b9aef0; }
+#graph .node.read circle.state { opacity: 1; stroke: #3b82c4; }
+#graph .node.cited circle.state { opacity: 1; stroke: #1d9a55; stroke-width: 5; }
+#graph .node text { pointer-events: none; text-anchor: middle; }
+#graph .node text.label { font-size: 11px; font-weight: 650; fill: #2b2840; paint-order: stroke; stroke: #fff; stroke-width: 3.5px; stroke-linejoin: round; }
+#graph .node text.badge-text { font-size: 9.5px; font-weight: 700; fill: #fff; }
+#graph.focus .edge:not(.near), #graph.focus .node:not(.near) { opacity: .15; }
+#graph .node:focus-visible circle.core { stroke: #222139; }
+.graph-legend { display: flex; flex-wrap: wrap; gap: .35rem 1rem; margin: 0; padding: .6rem 1.1rem 1rem; list-style: none; font-size: .74rem; color: var(--muted); }
+.graph-legend li { display: flex; align-items: center; gap: .4rem; }
+.key { display: inline-block; flex: none; }
+.key.node { width: .7rem; height: .7rem; border-radius: 50%; }
+.key.node.procedures { background: #5b43c7; }
+.key.node.roles { background: #1f8a70; }
+.key.node.services { background: #c27c0e; }
+.key.edge { width: 1.6rem; border-top: 2px solid; }
+.key.edge.referral { border-color: #6a4fd8; }
+.key.edge.mention { border-color: #a9a5bd; border-top-style: dashed; }
+.key.edge.supersede { border-color: #c0392b; border-top-style: dashed; }
+.key.ring { width: .8rem; height: .8rem; border-radius: 50%; border: 3px solid; }
+.key.ring.explored { border-color: #b9aef0; }
+.key.ring.read { border-color: #3b82c4; }
+.key.ring.cited { border-color: #1d9a55; }
