@@ -68,7 +68,7 @@ uv run .\web.py
 
 `check`, `lint` et `index` fonctionnent hors ligne, sans clé ni appel LLM. Seules les questions (`ask`, `baseline`, interface web) appellent le modèle configuré. Sous Linux/WSL, remplacez `.\demo.py` par `demo.py`.
 
-Contrôles hors ligne (46 tests) :
+Contrôles hors ligne (49 tests) :
 
 ```powershell
 uv run python -m unittest test_okf test_models test_retrieval test_web_questions -v
@@ -82,6 +82,7 @@ Compléter `.env` localement, sans coller de clé dans le chat :
 - `DEMO_CHAT_MODEL` : modèle qui explore les concepts et rédige les réponses, aussi utilisé pour la baseline ;
 - `DEMO_INDEX_MODEL` : facultatif depuis le passage à OKF, car l'indexation n'appelle plus de LLM. S'il est vide, il reprend `DEMO_CHAT_MODEL`. `DEMO_MODEL` reste un repli commun ;
 - `DEMO_BUNDLE`, `DEMO_QUESTIONS` : facultatifs, pour utiliser votre propre bundle (voir plus bas) ;
+- `DEMO_REASONING_EFFORT` : facultatif. Vide = réglage du modèle (recommandé) ; `none` accélère les réponses mais les petits modèles sautent alors souvent la lecture des sections.
 - `DEMO_NOW` : facultatif. Instant ISO 8601 (`2026-11-11T12:00:00Z`) qui fige la date du calcul de fraîcheur, pour rejouer une démonstration à l'identique.
 
 Exemple Ollama, avec réponses par un modèle cloud :
@@ -143,7 +144,7 @@ Le script ne calcule pas de score automatique. Remplissez `evaluation.csv` aprè
 
 - `http_status: 402` : le fournisseur refuse la requête pour paiement requis. Vérifiez les crédits du compte (Ollama Cloud, par exemple). L'index peut être conservé.
 - `finish_reason=length` : la fenêtre de contexte ou le plafond de sortie est atteint. Ollama limite le contexte à 4 096 jetons par défaut. `Modelfile.gemma4-16k` prépare une variante à 16 384 jetons : `ollama create gemma4:e4b-pageindex-16k -f .\Modelfile.gemma4-16k`, puis `DEMO_CHAT_MODEL=openai/gemma4:e4b-pageindex-16k`. [Documentation Ollama](https://docs.ollama.com/api/openai-compatibility#setting-the-local-context-size)
-- Pour les modèles locaux `gemma4:*` (hors variantes cloud) sur Ollama au port 11434, l'interface web transmet `reasoning_effort="none"`. Le réglage est affiché à l'écran.
+- « Citez les pages lues… » après une seconde tentative : le modèle a répondu sans lire de section. Mesuré le 12 novembre 2026 sur la question `renvoi` avec `gemma4:e4b-pageindex-16k` : sans raisonnement (`reasoning_effort="none"`), 3 réponses sur 7 étaient sans lecture ni citation valide ; avec le raisonnement du modèle, 4 sur 4 étaient correctes, en 23 à 35 s. Le raisonnement reste donc actif par défaut. `DEMO_REASONING_EFFORT=none` (ou `low`, `medium`, `high`) dans `.env` force un autre réglage, affiché à l'écran. Une citation d'une section que le modèle n'a jamais lue est refusée, même si l'application l'a récupérée pour vérification.
 - « Serveur du modèle injoignable » : avant chaque question, l'application vérifie en 5 s que `OPENAI_BASE_URL` répond. Sous WSL en réseau NAT (par défaut), le `localhost` de Windows n'est pas visible : un Ollama lancé sous Windows n'est pas joignable par `http://localhost:11434`. Activez le réseau en miroir (`[wsl2]` puis `networkingMode=mirrored` dans `%UserProfile%\.wslconfig`, puis `wsl --shutdown`) ou lancez le démonstrateur sous Windows. Une adresse de passerelle WSL (`172.x.x.1`) ou une instance Ollama lancée à la main ne survit pas au redémarrage du PC.
 - « Bundle OKF non conforme » : lancez `demo.py lint` et corrigez les erreurs listées.
 - L'historique des essais de la version PDF (11 novembre 2026) est résumé dans `BILAN.md` et dans l'historique Git.

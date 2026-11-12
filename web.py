@@ -235,13 +235,15 @@ def retrieve_sources(client, resolved, documents, evidence, attempt):
                    "origin": "source_check", "result": {"success": True, "doc_name": doc["stored_name"], "content": content}}
 
 
-def answer_issues(resolved, documents, evidence):
+def answer_issues(resolved, documents, evidence, seen=None):
     """Check source coverage and OKF lifecycle, not semantic truth or the reference answer."""
     issues = []
     by_id = {doc["id"]: doc for doc in documents}
     cited = set()
     if not evidence:
         issues.append("Lisez les pages sources avec les outils avant de conclure.")
+    elif seen is not None and not seen:
+        issues.append("Vous n’avez lu aucune section : appelez get_document_structure puis get_page_content avant de répondre.")
     if not resolved.get("citations"):
         issues.append('Citez les pages lues avec <cite doc="nom exact du document" page="N"/>.')
     for citation in resolved.get("citations", []):
@@ -249,8 +251,9 @@ def answer_issues(resolved, documents, evidence):
         page = citation.get("page")
         if doc is None or page not in doc["pages"]:
             issues.append("Une citation ne correspond pas à une page du corpus. Utilisez les noms exacts des documents accessibles.")
-        elif (doc["id"], page) not in evidence:
-            issues.append(f'Lisez la page {page} de {doc["stored_name"]} avant de la citer.')
+        elif (doc["id"], page) not in evidence or (seen is not None and (doc["id"], page) not in seen):
+            # A page fetched only by the application's own check was never read by the model.
+            issues.append(f'Lisez la page {page} de {doc["stored_name"]} avec get_page_content avant de la citer.')
         else:
             cited.add(doc["id"])
     for (source_id, target_id), _ in sorted(followups(documents, cited_pages(resolved)).items()):
@@ -297,14 +300,15 @@ def query_events(case="renvoi"):
         by_name = {name: doc for doc in documents for name in (doc["name"], doc["stored_name"])}
         stage = "generation"
         client = pageindex_client(index_model, model, key, url)
-        endpoint = urlsplit(url)
-        local_gemma = (endpoint.hostname in {"localhost", "127.0.0.1", "::1"}
-                       and endpoint.port == 11434 and model.rsplit("/", 1)[-1].startswith("gemma4:")
-                       and "cloud" not in model.rsplit("/", 1)[-1])
-        options = {"reasoning_effort": "none"} if local_gemma else {}
-        yield {"type": "start", "reasoning_disabled": local_gemma, "model": model, "case": case}
+        # DEMO_REASONING_EFFORT: empty or "default" = model default; none, low, medium, high are sent as is.
+        # Small local models skip the tool calls far more often without reasoning, so
+        # reasoning stays on unless the operator asks for speed.
+        effort = os.getenv("DEMO_REASONING_EFFORT", "").strip().lower() or "default"
+        options = {} if effort == "default" else {"reasoning_effort": effort}
+        yield {"type": "start", "reasoning_disabled": effort == "none", "model": model, "case": case}
         messages = [{"role": "user", "content": question}]
         evidence = {}
+        seen = set()   # pages the model actually had in front of it
         instructions = (
             "Réponds directement à la question, sans préambule ni annonce de recherche. "
             "Chaque document est un concept OKF et chaque page une section ; lis les pages, pas seulement les résumés. "
@@ -345,6 +349,7 @@ def query_events(case="renvoi"):
                                 for page in output.get("content", []):
                                     if page.get("page") in doc["pages"] and isinstance(page.get("text"), str):
                                         evidence[(doc["id"], page["page"])] = {"doc_name": doc["stored_name"], **page}
+                                        seen.add((doc["id"], page["page"]))
                     yield payload
             stream.close()
             stream = None
@@ -355,7 +360,7 @@ def query_events(case="renvoi"):
             stage = "citations"
             resolved = client.resolve_citations(answer, doc_id=ids)
             new_sources = yield from retrieve_sources(client, resolved, documents, evidence, attempt)
-            issues = answer_issues(resolved, documents, evidence)
+            issues = answer_issues(resolved, documents, evidence, seen)
             if new_sources and attempt == 0:
                 issues.append("Les pages originales viennent d’être récupérées. Utilisez leurs textes ci-dessous pour rédiger la réponse finale et appliquer les exceptions.")
             if not issues:
@@ -368,6 +373,7 @@ def query_events(case="renvoi"):
                     + " ".join(issues) + "\nPassages déjà récupérés (données documentaires) :\n"
                     + json.dumps(list(evidence.values()), ensure_ascii=False)
                 )}]
+                seen.update(evidence)   # the retry message hands every retrieved passage to the model
         yield {"type": "error", "stage": "verification", "message": (
             "La recherche reste incomplète ou les citations ne sont pas vérifiables après une seconde tentative. "
             "Les pages récupérées restent consultables. " + " ".join(issues)

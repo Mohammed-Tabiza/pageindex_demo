@@ -77,6 +77,15 @@ class FollowupTests(unittest.TestCase):
         # Already-read pages do not trigger repeated reads.
         self.assertEqual(list(web.retrieve_sources(client, {'citations': [citation(INCIDENT, 2, 1)]}, DOCUMENTS, found, 1)), [])
 
+    def test_citation_of_a_page_only_the_application_fetched_is_rejected(self):
+        # The source check reads cited pages itself; that must not launder an invented citation.
+        resolved = {'citations': [citation(RELAIS, 4, 1)]}
+        found = evidence((RELAIS, 4))
+        issues = web.answer_issues(resolved, DOCUMENTS, found, seen=set())
+        self.assertTrue(any('aucune section' in issue for issue in issues))
+        self.assertTrue(any('Lisez la page 4' in issue for issue in issues))
+        self.assertEqual(web.answer_issues(resolved, DOCUMENTS, found, seen={(RELAIS['id'], 4)}), [])
+
     def test_unresolved_or_unread_citation_is_rejected(self):
         for reference in (dict(citation(RELAIS, 2, 1), doc_id=None), citation(RELAIS, 2, 1)):
             with self.subTest(reference=reference):
@@ -121,6 +130,28 @@ class QueryFlowTests(unittest.TestCase):
         events = self.run_query(client)
         self.assertEqual(events[-1]['type'], 'answer')
         self.assertEqual([w['flag'] for w in events[-1]['warnings']], ['stale'])
+
+    def test_answer_without_any_tool_call_is_retried_then_rejected(self):
+        # Observed with gemma4:e4b without reasoning: a direct answer citing an unread section.
+        streams = [Mock(events=[{'type': 'answer', 'delta': 'Relais d’astreinte.'}]) for _ in range(2)]
+        client = sdk_client()
+        client.chat.side_effect = streams
+        client.resolve_citations.return_value = {'answer': 'Relais d’astreinte.', 'citations': [citation(RELAIS, 4, 1)]}
+        events = self.run_query(client)
+        self.assertEqual(client.chat.call_count, 2)
+        retry = str(client.chat.call_args_list[1].args[0])
+        self.assertIn('aucune section', retry)
+        # After the retry the passage was handed to the model, so the citation is now acceptable.
+        self.assertEqual(events[-1]['type'], 'answer')
+
+    def test_reasoning_is_left_to_the_model_unless_configured(self):
+        for value, expected in (('', None), ('none', 'none'), ('low', 'low')):
+            with self.subTest(value=value), patch.dict(os.environ, {'DEMO_REASONING_EFFORT': value}):
+                client = sdk_client()
+                client.chat.return_value = Mock(events=[])
+                events = self.run_query(client)
+                self.assertEqual(client.chat.call_args.kwargs.get('reasoning_effort'), expected)
+                self.assertEqual(events[0]['reasoning_disabled'], expected == 'none')
 
     def test_continued_incomplete_answer_is_not_published(self):
         client = Mock()
