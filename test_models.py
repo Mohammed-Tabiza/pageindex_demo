@@ -2,8 +2,11 @@
 import json
 import os
 import shutil
+import socket
+import threading
 import tempfile
 import unittest
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -46,6 +49,35 @@ class ConfigurationTests(unittest.TestCase):
         self.assertNotIn('confidential-token', json.dumps(event))
 
 
+class EndpointTests(unittest.TestCase):
+    def test_unreachable_server_is_reported_quickly_without_credentials(self):
+        with socket.socket() as probe:     # a free port nobody listens on
+            probe.bind(('127.0.0.1', 0))
+            port = probe.getsockname()[1]
+        message = demo.endpoint_error(f'http://user:secret@127.0.0.1:{port}/v1', 'test-key', timeout=2)
+        self.assertIn('injoignable', message)
+        self.assertIn(f'127.0.0.1:{port}', message)
+        self.assertNotIn('secret', message)
+
+    def test_any_http_answer_counts_as_reachable(self):
+        server = ThreadingHTTPServer(('127.0.0.1', 0), BaseHTTPRequestHandler)   # answers 501
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            self.assertIsNone(demo.endpoint_error(f'http://127.0.0.1:{server.server_port}/v1', 'k', timeout=2))
+        finally:
+            server.shutdown()
+            server.server_close()
+
+    def test_web_stops_before_generation_when_server_is_unreachable(self):
+        with patch.object(web, 'configuration', return_value=(INDEX, CHAT, 'k', URL)), \
+             patch.object(web, 'endpoint_error', return_value='Serveur du modèle injoignable'), \
+             patch.object(web, 'pageindex_client') as factory:
+            events = list(web.query_events())
+        self.assertEqual([(e['type'], e['stage']) for e in events], [('error', 'connection')])
+        factory.assert_not_called()
+
+
 class ModelRoutingTests(unittest.TestCase):
     """A temporary copy of the demo bundle, with the SDK client replaced by a double."""
 
@@ -63,6 +95,7 @@ class ModelRoutingTests(unittest.TestCase):
         patch.object(web, 'ROOT', self.root).start()
         patch.object(demo, 'configuration', return_value=(INDEX, CHAT, 'test-key', URL)).start()
         patch.object(web, 'configuration', return_value=(INDEX, CHAT, 'test-key', URL)).start()
+        patch.object(web, 'endpoint_error', return_value=None).start()
         self.client = Mock()
         self.client.chat.return_value = ['Réponse test']
         self.factory = Mock(return_value=self.client)

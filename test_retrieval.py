@@ -86,6 +86,7 @@ class FollowupTests(unittest.TestCase):
 class QueryFlowTests(unittest.TestCase):
     def run_query(self, client):
         with patch.object(web, 'configuration', return_value=('index-model', 'chat-model', 'key', 'http://localhost:11434/v1')), \
+             patch.object(web, 'endpoint_error', return_value=None), \
              patch.object(web, 'corpus', return_value={'documents': DOCUMENTS}), \
              patch.object(web, 'selected_question', return_value='Qui contacter ?'), \
              patch.object(web, 'pageindex_client', return_value=client):

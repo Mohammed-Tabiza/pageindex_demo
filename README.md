@@ -68,7 +68,7 @@ uv run .\web.py
 
 `check`, `lint` et `index` fonctionnent hors ligne, sans clé ni appel LLM. Seules les questions (`ask`, `baseline`, interface web) appellent le modèle configuré. Sous Linux/WSL, remplacez `.\demo.py` par `demo.py`.
 
-Contrôles hors ligne (43 tests) :
+Contrôles hors ligne (46 tests) :
 
 ```powershell
 uv run python -m unittest test_okf test_models test_retrieval test_web_questions -v
@@ -144,6 +144,7 @@ Le script ne calcule pas de score automatique. Remplissez `evaluation.csv` aprè
 - `http_status: 402` : le fournisseur refuse la requête pour paiement requis. Vérifiez les crédits du compte (Ollama Cloud, par exemple). L'index peut être conservé.
 - `finish_reason=length` : la fenêtre de contexte ou le plafond de sortie est atteint. Ollama limite le contexte à 4 096 jetons par défaut. `Modelfile.gemma4-16k` prépare une variante à 16 384 jetons : `ollama create gemma4:e4b-pageindex-16k -f .\Modelfile.gemma4-16k`, puis `DEMO_CHAT_MODEL=openai/gemma4:e4b-pageindex-16k`. [Documentation Ollama](https://docs.ollama.com/api/openai-compatibility#setting-the-local-context-size)
 - Pour les modèles locaux `gemma4:*` (hors variantes cloud) sur Ollama au port 11434, l'interface web transmet `reasoning_effort="none"`. Le réglage est affiché à l'écran.
+- « Serveur du modèle injoignable » : avant chaque question, l'application vérifie en 5 s que `OPENAI_BASE_URL` répond. Sous WSL en réseau NAT (par défaut), le `localhost` de Windows n'est pas visible : un Ollama lancé sous Windows n'est pas joignable par `http://localhost:11434`. Activez le réseau en miroir (`[wsl2]` puis `networkingMode=mirrored` dans `%UserProfile%\.wslconfig`, puis `wsl --shutdown`) ou lancez le démonstrateur sous Windows. Une adresse de passerelle WSL (`172.x.x.1`) ou une instance Ollama lancée à la main ne survit pas au redémarrage du PC.
 - « Bundle OKF non conforme » : lancez `demo.py lint` et corrigez les erreurs listées.
 - L'historique des essais de la version PDF (11 novembre 2026) est résumé dans `BILAN.md` et dans l'historique Git.
 

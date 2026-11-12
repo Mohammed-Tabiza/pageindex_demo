@@ -130,6 +130,35 @@ def configuration():
     return index_model, chat_model, key, url
 
 
+def endpoint_error(url, key, timeout=5):
+    """Fail fast when the model server cannot be reached at all.
+
+    Any HTTP answer (even 401 or 404) proves the server is there; only a
+    connection failure or a timeout is reported. Without this check, a
+    firewall that silently drops packets makes every query wait for the
+    global deadline. Returns None when reachable, else a message.
+    """
+    import socket
+    import urllib.error
+    import urllib.request
+    from urllib.parse import urlsplit
+
+    parts = urlsplit(url)
+    shown = f"{parts.scheme}://{parts.hostname}" + (f":{parts.port}" if parts.port else "")  # never echo credentials
+    request = urllib.request.Request(url.rstrip("/") + "/models", headers={"Authorization": f"Bearer {key}"})
+    try:
+        urllib.request.urlopen(request, timeout=timeout).close()
+    except urllib.error.HTTPError:
+        return None
+    except (urllib.error.URLError, socket.timeout, TimeoutError, OSError) as error:
+        reason = getattr(error, "reason", error)
+        kind = "délai dépassé" if isinstance(reason, (socket.timeout, TimeoutError)) else "connexion impossible"
+        return (f"Serveur du modèle injoignable à {shown} ({kind} en {timeout} s). "
+                "Vérifiez qu’il est lancé et accessible depuis cet environnement ; sous WSL en réseau NAT, "
+                "le localhost de Windows n’est pas visible (voir README, Diagnostic).")
+    return None
+
+
 def pageindex_client(index_model, chat_model, key, url):
     # Disable SDK tracing; retain only observable tool events, not model thinking.
     os.environ["OPENAI_AGENTS_DISABLE_TRACING"] = "1"
@@ -218,7 +247,10 @@ def main():
     if args.worker:
         worker(args)
         return
-    configuration()  # fail fast, before spawning or sending anything
+    _, _, key, url = configuration()  # fail fast, before spawning or sending anything
+    problem = endpoint_error(url, key)
+    if problem:
+        raise ValueError(problem)
     run.mkdir(parents=True)
     cmd = [sys.executable, str(Path(__file__).resolve()), args.action, "--case", args.case, "--worker", "--output", str(run)]
     try:

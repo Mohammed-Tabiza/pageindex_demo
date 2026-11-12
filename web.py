@@ -12,7 +12,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 import okf
-from demo import ROOT, bundle_path, configuration, ensure_index, load_questions, pageindex_client
+from demo import ROOT, bundle_path, configuration, endpoint_error, ensure_index, load_questions, pageindex_client
 
 TIMEOUT = 120
 QUERY_LOCK = threading.Lock()
@@ -286,6 +286,10 @@ def query_events(case="renvoi"):
     try:
         question = selected_question(case)
         index_model, model, key, url = configuration()
+        problem = endpoint_error(url, key)
+        if problem:
+            yield {"type": "error", "stage": "connection", "message": problem}
+            return
         stage = "index"
         data = corpus()
         documents = data["documents"]

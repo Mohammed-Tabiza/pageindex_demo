@@ -30,6 +30,7 @@ class QuestionTests(unittest.TestCase):
                 client = Mock()
                 client.chat.return_value = stream
                 with patch.object(web, 'configuration', return_value=('index', 'chat', 'key', 'http://localhost/v1')), \
+                     patch.object(web, 'endpoint_error', return_value=None), \
                      patch.object(web, 'corpus', return_value={'documents': []}), \
                      patch.object(web, 'pageindex_client', return_value=client):
                     events = list(web.query_events(question['id']))
