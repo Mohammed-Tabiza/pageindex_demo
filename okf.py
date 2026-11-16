@@ -41,14 +41,20 @@ _FOOTNOTE_DEF = re.compile(r"^\[\^([^\]\s]+)\]:[ \t]*(.*)$")
 _FOOTNOTE_REF = re.compile(r"\[\^([^\]\s]+)\](?!:)")
 _LINK = re.compile(r"(?<!!)\[([^\]\n]*)\]\(<?([^)\s>]+)>?(?:[ \t]+\"[^\"]*\")?\)")
 _SCHEME = re.compile(r"^[a-z][a-z0-9+.-]*:", re.I)
+# Link to a concept of another bundle: `bundle-name:/path/concept.md#anchor`, the
+# same form as question sources. The single slash keeps it apart from `https://`.
+_CROSS = re.compile(r"^([A-Za-z0-9][A-Za-z0-9_.-]*):(/(?!/)\S*)$")
 _ACTOR = re.compile(r"^(human:\S+|process:\S+|team:\S+|[^\s/:]+/\S+)$")
 _DATE_HEADING = re.compile(r"^##[ \t]+(.+?)[ \t]*$")
 _INDEX_ENTRY = re.compile(r"^[ \t]*[*-][ \t]+\[[^\]]+\]\([^)]+\)")
 # A link sentence that hands the reader over to another concept, rather than
 # merely mentioning it. Only these links make the target part of the answer.
+# Verb forms are listed explicitly: a bare stem would also match "suivant",
+# "suivi", "rapport…" or "consultation", which are not hand-overs.
 REFERRAL = re.compile(
-    r"\b(appliqu\w*|suiv\w*|report\w*|voir|consult\w*|cf\b|remplac\w*|conformément|"
-    r"apply|follow|see|refer\w*|superseded|replaced)", re.I)
+    r"\b(appliqu(?:er|ez|e|ent)|suiv(?:re|ez|ra|ront)|report(?:er|ez)|voir|consult(?:er|ez)|cf\b|"
+    r"remplac(?:é|ée|és|ées|e|ent)|conformément|"
+    r"apply|follow|follows|see|refer(?:s|red)?\s+to|superseded|replaced)\b", re.I)
 
 
 @dataclass
@@ -71,10 +77,12 @@ class Link:
     target_page: int | None = None
     referral: bool = False
     broken: bool = False
+    bundle: str | None = None    # other bundle named by a cross-bundle link
+    concept: "Concept | None" = field(default=None, repr=False, compare=False)   # resolved target
 
     def as_dict(self):
         return {key: getattr(self, key) for key in
-                ("text", "href", "section", "target", "anchor", "target_page", "referral", "broken")}
+                ("text", "href", "section", "target", "anchor", "target_page", "referral", "broken", "bundle")}
 
 
 @dataclass
@@ -97,6 +105,8 @@ class Concept:
     sections: list[Section] = field(default_factory=list)
     footnotes: dict[str, str] = field(default_factory=dict)
     links: list[Link] = field(default_factory=list)
+    root: str = ""                  # bundle directory: keeps document ids distinct across bundles
+    namespace: str | None = None    # bundle name, set when several bundles are queried together
 
     # ── §4.1 recommended fields ──
     @property
@@ -119,12 +129,23 @@ class Concept:
 
     @property
     def doc_name(self) -> str:
-        """PageIndex document name: '/' is not allowed in SDK file names."""
-        return self.id.replace("/", ".") + ".md"
+        """PageIndex document name: '/' is not allowed in SDK file names.
+
+        Prefixed with the bundle name only when several bundles are queried
+        together: the SDK resolves names among the queried documents only."""
+        prefix = f"{self.namespace}." if self.namespace else ""
+        return prefix + self.id.replace("/", ".") + ".md"
+
+    @property
+    def key(self) -> str:
+        """Reference used by question files: 'concept/id', or 'bundle:concept/id'."""
+        return f"{self.namespace}:{self.id}" if self.namespace else self.id
 
     @property
     def doc_id(self) -> str:
-        return DOC_PREFIX + hashlib.sha256(self.id.encode()).hexdigest()[:24]
+        # The bundle directory takes part in the id, so that two bundles holding the
+        # same concept path never overwrite each other in the shared store.
+        return DOC_PREFIX + hashlib.sha256(f"{self.root}\n{self.id}".encode()).hexdigest()[:24]
 
     # ── §5 provenance, trust, lifecycle ──
     @property
@@ -206,6 +227,10 @@ class Bundle:
     indexes: dict[str, str]          # directory → index.md body
     logs: dict[str, str]
     issues: list[Issue]
+
+    @property
+    def name(self) -> str:
+        return self.root.name
 
     @property
     def errors(self) -> list[Issue]:
@@ -365,30 +390,62 @@ def sentence_around(text: str, start: int, end: int) -> str:
     return text[max(left, 0):min(rights) if rights else len(text)]
 
 
+def _attach(bundle: Bundle, concept: Concept, link: Link, target: Concept | None, where: str) -> None:
+    """Resolve `link` to `target` (a concept of `where`), or report it as broken."""
+    if target is None:
+        link.broken = True
+        # §6.1 / §11: broken links are tolerated, only reported.
+        bundle.issues.append(Issue("warning", concept.path, f"lien sans cible dans {where} : {link.href}"))
+        return
+    link.target, link.concept = target.id, target
+    target_section = target.section_for(link.anchor)
+    if link.anchor and target_section is None:
+        bundle.issues.append(Issue("warning", concept.path, f"ancre introuvable : {link.href}"))
+    link.target_page = target_section.page if target_section else None
+
+
 def resolve_links(bundle: Bundle) -> None:
+    """Links inside the bundle; cross-bundle links wait for resolve_cross_links."""
     for concept in bundle.concepts.values():
         for section in concept.sections:
             for match in _LINK.finditer(section.markdown):
                 text, href = match.group(1), match.group(2)
-                path, anchor = resolve_href(concept.path, href)
-                if path is None:
-                    continue
-                link = Link(text=text, href=href, section=section.page, anchor=anchor)
-                if path.endswith("/") or PurePosixPath(path).name in RESERVED:
-                    continue    # directory listings are navigation, not concepts.
-                target = bundle.concepts.get(path.removesuffix(".md")) if path.endswith(".md") else None
-                if target is None:
-                    link.broken = True
-                    # §6.1 / §11: broken links are tolerated, only reported.
-                    bundle.issues.append(Issue("warning", concept.path, f"lien sans cible dans le bundle : {href}"))
+                cross = _CROSS.match(href)
+                path, anchor = resolve_href(concept.path, cross.group(2) if cross else href)
+                if path is None or path.endswith("/") or PurePosixPath(path).name in RESERVED:
+                    continue    # external links; directory listings are navigation, not concepts.
+                link = Link(text=text, href=href, section=section.page, anchor=anchor,
+                            referral=bool(REFERRAL.search(sentence_around(section.markdown, match.start(), match.end()))))
+                if cross and cross.group(1) != bundle.name:
+                    link.bundle = cross.group(1)
                 else:
-                    link.target = target.id
-                    target_section = target.section_for(anchor)
-                    if anchor and target_section is None:
-                        bundle.issues.append(Issue("warning", concept.path, f"ancre introuvable : {href}"))
-                    link.target_page = target_section.page if target_section else None
-                    link.referral = bool(REFERRAL.search(sentence_around(section.markdown, match.start(), match.end())))
+                    target = bundle.concepts.get(path.removesuffix(".md")) if path.endswith(".md") else None
+                    _attach(bundle, concept, link, target, "le bundle")
+                if link.broken:
+                    link.referral = False
                 concept.links.append(link)
+
+
+def resolve_cross_links(bundles: list[Bundle]) -> None:
+    """`other:/path.md` links, resolved only among the bundles queried together:
+    a link to a bundle that is not loaded is reported and never followed."""
+    by_name = {b.name: b for b in bundles}
+    for bundle in bundles:
+        for concept in bundle.concepts.values():
+            for link in concept.links:
+                if link.bundle is None:
+                    continue
+                other = by_name.get(link.bundle)
+                if other is None:
+                    link.broken, link.referral = True, False
+                    bundle.issues.append(Issue("warning", concept.path,
+                                               f"lien vers le bundle « {link.bundle} », non chargé : non suivi ({link.href})"))
+                    continue
+                path, _ = resolve_href("", _CROSS.match(link.href).group(2))
+                target = other.concepts.get(path.removesuffix(".md")) if path and path.endswith(".md") else None
+                _attach(bundle, concept, link, target, f"le bundle « {other.name} »")
+                if link.broken:
+                    link.referral = False
 
 
 def check_concept(concept: Concept, issues: list[Issue]) -> None:
@@ -476,6 +533,12 @@ def check_log(path: str, text: str, issues: list[Issue]) -> str:
 
 
 def load_bundle(root: Path | str) -> Bundle:
+    bundle = _load_bundle(root)
+    resolve_cross_links([bundle])
+    return bundle
+
+
+def _load_bundle(root: Path | str) -> Bundle:
     root = Path(root).resolve()
     if not root.is_dir():
         raise ValueError(f"Bundle OKF introuvable : {root}")
@@ -505,7 +568,8 @@ def load_bundle(root: Path | str) -> Bundle:
         if error or frontmatter is None:
             bundle.issues.append(Issue("error", path, error or "frontmatter YAML absent (§11.1)"))
             continue
-        concept = Concept(path.removesuffix(".md"), path, hashlib.sha256(data).hexdigest(), frontmatter, body)
+        concept = Concept(path.removesuffix(".md"), path, hashlib.sha256(data).hexdigest(), frontmatter, body,
+                          root=str(root))
         if not concept.type:
             bundle.issues.append(Issue("error", path, "champ type absent ou vide (§11.2)"))
             continue
@@ -523,6 +587,32 @@ def load_bundle(root: Path | str) -> Bundle:
     return bundle
 
 
+def load_bundles(roots) -> list[Bundle]:
+    """Several bundles queried together; concept names get the bundle name as prefix.
+
+    OKF §6 paths are bundle-relative: `/procedures/x.md` always names a concept of
+    the same bundle. Another bundle is named explicitly, `other:/procedures/x.md`,
+    and is followed only when it is loaded too.
+    """
+    roots = list(dict.fromkeys(Path(r).resolve() for r in ([roots] if isinstance(roots, (str, Path)) else roots)))
+    bundles = [_load_bundle(root) for root in roots]
+    if len(bundles) > 1:
+        names = [b.name for b in bundles]
+        duplicates = sorted({n for n in names if names.count(n) > 1})
+        if duplicates:
+            raise ValueError("Deux bundles portent le même nom de dossier : " + ", ".join(duplicates)
+                             + ". Renommez l'un des dossiers.")
+        for bundle in bundles:
+            for concept in bundle.concepts.values():
+                concept.namespace = bundle.name
+    resolve_cross_links(bundles)
+    return bundles
+
+
+def _many(bundles) -> list[Bundle]:
+    return [bundles] if isinstance(bundles, Bundle) else list(bundles)
+
+
 def replacement(bundle: Bundle, concept: Concept) -> Concept | None:
     if not concept.superseded_by:
         return None
@@ -530,11 +620,23 @@ def replacement(bundle: Bundle, concept: Concept) -> Concept | None:
     return bundle.concepts.get(path.removesuffix(".md")) if path else None
 
 
+def replaced(bundle: Bundle, concept: Concept) -> list[Concept]:
+    """Concepts whose superseded_by points at this one (the inverse link).
+
+    Readers of the rule in force learn that an older, different rule exists,
+    so a question quoting that older rule can be answered "no longer in force"
+    rather than "not documented".
+    """
+    return sorted((c for c in bundle.concepts.values() if c is not concept
+                   and (target := replacement(bundle, c)) is not None and target.id == concept.id),
+                  key=lambda c: c.id)
+
+
 # ── PageIndex adapter ──
 
 def lifecycle_line(bundle: Bundle, concept: Concept, now: dt.datetime) -> str:
     """One line that travels with every page the agent reads."""
-    parts = [f"OKF {concept.id}", concept.type, f"statut {concept.status}"]
+    parts = [f"OKF {concept.key}", concept.type, f"statut {concept.status}"]
     tier = concept.trust_tier
     if concept.last_verified:
         tier += f", vérifié le {concept.last_verified[:10]}"
@@ -548,20 +650,25 @@ def lifecycle_line(bundle: Bundle, concept: Concept, now: dt.datetime) -> str:
         parts.append("OBSOLÈTE" + (f", remplacé par {target.doc_name}" if target else ""))
     if concept.status == "draft":
         parts.append("BROUILLON non validé")
+    for old in replaced(bundle, concept):
+        # Quote the old rule itself: small models do not open the deprecated concept on
+        # their own, so without it they answer "not documented" instead of "no longer in force".
+        parts.append(f"remplace {old.doc_name}, OBSOLÈTE, dont l'ancienne règle n'est plus en vigueur : "
+                     f"« {summarize(old.sections[0].markdown, 160)} »")
     return "[" + " · ".join(parts) + "]"
 
 
 def agent_page(bundle: Bundle, concept: Concept, section: Section, now: dt.datetime) -> str:
     """Page text given to the agent: links resolved to PageIndex names and pages,
     and footnotes resolved to their `sources` entry (§5.1 per-claim attribution)."""
+    resolved = {link.href: link for link in concept.links if link.section == section.page}
+
     def annotate(match):
-        path, anchor = resolve_href(concept.path, match.group(2))
-        if path is None:
-            return match.group(0)
-        target = bundle.concepts.get(path.removesuffix(".md"))
+        link = resolved.get(match.group(2))
+        target = link.concept if link else None
         if target is None:
             return match.group(0)
-        target_section = target.section_for(anchor)
+        target_section = target.section_for(link.anchor)
         count = len(target.sections)
         where = f"page {target_section.page}" if target_section else ("page 1" if count == 1 else f"pages 1-{count}")
         return f"{match.group(0)} {{→ {target.doc_name}, {where}}}"
@@ -611,7 +718,10 @@ def description(bundle: Bundle, concept: Concept, now: dt.datetime) -> str:
     if concept.is_stale(now):
         flags.append(f"PÉRIMÉ depuis le {concept.stale_after[:10]}")
     prefix = "[" + " · ".join(flags) + "] " if flags else ""
-    return prefix + f"{concept.type} · {concept.title}" + (f" — {concept.description}" if concept.description else "")
+    olds = replaced(bundle, concept)
+    suffix = f" (remplace {', '.join(c.doc_name for c in olds)}, obsolète)" if olds else ""
+    return (prefix + f"{concept.type} · {concept.title}"
+            + (f" — {concept.description}" if concept.description else "") + suffix)
 
 
 def metadata(bundle: Bundle, concept: Concept, now: dt.datetime) -> dict:
@@ -631,6 +741,7 @@ def metadata(bundle: Bundle, concept: Concept, now: dt.datetime) -> dict:
         "tags": ", ".join(concept.tags) or None,
         "sources": len(concept.sources),
         "superseded_by": target.doc_name if target else None,
+        "supersedes": ", ".join(c.doc_name for c in replaced(bundle, concept)) or None,
         "resource": concept.frontmatter.get("resource"),
     }
     return {key: value for key, value in values.items() if value is not None and value != ""}
@@ -645,59 +756,105 @@ def rendered(bundle: Bundle, concept: Concept, now: dt.datetime) -> dict:
     }
 
 
-def sync(bundle: Bundle, storage_path: Path | str, now: dt.datetime | None = None) -> dict:
-    """Mirror the bundle into the local PageIndex store, incrementally.
+def sync(bundles, storage_path: Path | str, now: dt.datetime | None = None) -> dict:
+    """Mirror one or several bundles into the local PageIndex store, incrementally.
 
     Unchanged concepts keep their document; changed concepts (content or a
     freshness flip such as crossing `stale_after`) are rewritten in place, and
-    concepts removed from the bundle are deleted. No LLM call is made.
+    concepts removed from a bundle are deleted. Each document records its
+    bundle, so syncing one bundle never touches the documents of another.
+    No LLM call is made.
     """
     from pageindex.local_store import DocStore
 
-    if not bundle.conformant:
-        raise ValueError("Bundle OKF non conforme : corrigez les erreurs signalées par « demo.py lint ».")
+    bundles = _many(bundles)
+    for bundle in bundles:
+        if not bundle.conformant:
+            raise ValueError(f"Bundle OKF non conforme ({bundle.root}) : corrigez les erreurs signalées par « demo.py lint ».")
     now = now or now_utc()
     store = DocStore(str(storage_path))
     stamp = now.isoformat().replace("+00:00", "Z")
+    roots = {str(b.root) for b in bundles}
     docs, changed = [], []
     with store.lock():
-        existing = {m["id"]: m for m in store.list_metas() if str(m.get("id", "")).startswith(DOC_PREFIX)}
-        for concept in sorted(bundle.concepts.values(), key=lambda c: c.id):
-            data = rendered(bundle, concept, now)
-            fingerprint = hashlib.sha256(json.dumps(data, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
-            current = existing.pop(concept.doc_id, None)
-            if not current or (current.get("metadata") or {}).get("okf_fingerprint") != fingerprint:
-                meta = {
-                    "id": concept.doc_id, "name": concept.doc_name, "description": data["description"],
-                    "status": "completed", "createdAt": stamp, "pageNum": len(data["pages"]),
-                    "folderId": None, "mode": "okf",
-                    "metadata": {**data["metadata"], "okf_fingerprint": fingerprint},
-                }
-                store.save_document(concept.doc_id, meta, data["tree"], data["pages"])
-                changed.append(concept.id)
-            docs.append({"concept": concept.id, "file": concept.path, "doc_id": concept.doc_id,
-                         "name": concept.doc_name, "sha256": concept.sha256, "fingerprint": fingerprint})
+        existing = {}
+        for m in store.list_metas():
+            owner = (m.get("metadata") or {}).get("okf_bundle")
+            # Documents of the synced bundles, and legacy documents written before
+            # bundles were recorded (their ids no longer match any concept).
+            if str(m.get("id", "")).startswith(DOC_PREFIX) and (owner in roots or owner is None):
+                existing[m["id"]] = m
+        for bundle in bundles:
+            for concept in sorted(bundle.concepts.values(), key=lambda c: c.id):
+                data = rendered(bundle, concept, now)
+                # The name takes part: it gains or loses its bundle prefix with the set of bundles.
+                fingerprint = hashlib.sha256(json.dumps({"name": concept.doc_name, **data}, sort_keys=True,
+                                                        ensure_ascii=False).encode()).hexdigest()
+                current = existing.pop(concept.doc_id, None)
+                if not current or (current.get("metadata") or {}).get("okf_fingerprint") != fingerprint:
+                    meta = {
+                        "id": concept.doc_id, "name": concept.doc_name, "description": data["description"],
+                        "status": "completed", "createdAt": stamp, "pageNum": len(data["pages"]),
+                        "folderId": None, "mode": "okf",
+                        "metadata": {**data["metadata"], "okf_fingerprint": fingerprint, "okf_bundle": str(bundle.root)},
+                    }
+                    store.save_document(concept.doc_id, meta, data["tree"], data["pages"])
+                    changed.append(concept.key)
+                docs.append({"concept": concept.key, "bundle": bundle.name, "file": concept.path,
+                             "doc_id": concept.doc_id, "name": concept.doc_name, "sha256": concept.sha256,
+                             "fingerprint": fingerprint})
         for doc_id in existing:
             store.delete_document(doc_id)
-    return {"format": "okf", "okf_version": bundle.version or SPEC_VERSION, "indexer": INDEXER,
-            "bundle": str(bundle.root), "indexed_at": stamp, "docs": docs,
-            "changed": changed, "removed": len(existing),
-            "warnings": len(bundle.issues) - len(bundle.errors)}
+    versions = sorted({b.version or SPEC_VERSION for b in bundles})
+    return {"format": "okf", "okf_version": ", ".join(versions), "indexer": INDEXER,
+            "bundle": ", ".join(str(b.root) for b in bundles), "bundles": [str(b.root) for b in bundles],
+            "indexed_at": stamp, "docs": docs, "changed": changed, "removed": len(existing),
+            "warnings": sum(len(b.issues) - len(b.errors) for b in bundles)}
 
 
-def full_text(bundle: Bundle) -> str:
-    """Whole bundle as raw markdown, for the full-context baseline."""
-    return "\n\n".join(f"SOURCE {c.doc_name}\n" + (bundle.root / c.path).read_text(encoding="utf-8")
-                       for c in sorted(bundle.concepts.values(), key=lambda c: c.id))
+def full_text(bundles, rendered: bool = False, now: dt.datetime | None = None) -> str:
+    """Whole bundle in one text, for the full-context baselines.
 
+    Each concept is a DOCUMENT named as in PageIndex and each section a numbered
+    PAGE, so that the baselines cite with the same tags as the PageIndex agent.
 
-def report(bundle: Bundle, now: dt.datetime | None = None) -> dict:
+    * raw: the YAML frontmatter and the section markdown as written;
+    * rendered: exactly the pages the PageIndex agent reads (computed status
+      line, annotated links, resolved sources), after the concept description.
+    """
     now = now or now_utc()
-    concepts = bundle.concepts.values()
+    parts = []
+    for bundle, c in ((b, c) for b in _many(bundles) for c in sorted(b.concepts.values(), key=lambda c: c.id)):
+        if rendered:
+            lines = [f"DOCUMENT {c.doc_name} — {description(bundle, c, now)}"]
+            lines += [f"PAGE {s.page}\n{agent_page(bundle, c, s, now)}" for s in c.sections]
+        else:
+            text = (bundle.root / c.path).read_text(encoding="utf-8").lstrip("﻿")
+            match = _FRONTMATTER.match(text)
+            lines = [f"DOCUMENT {c.doc_name}", match.group(0).strip() if match else ""]
+            lines += [f"PAGE {s.page}\n{s.markdown}" for s in c.sections]
+            lines += [f"[^{label}]: {note}" for label, note in c.footnotes.items()]
+        parts.append("\n\n".join(filter(None, lines)))
+    return "\n\n".join(parts)
+
+
+def report(bundles, now: dt.datetime | None = None) -> dict:
+    """Conformance and lifecycle summary of one bundle, or of several queried together."""
+    now = now or now_utc()
+    bundles = _many(bundles)
+    several = len(bundles) > 1
+    concepts = [c for b in bundles for c in b.concepts.values()]
     count = lambda predicate: sum(1 for c in concepts if predicate(c))
+
+    def issues(level):
+        return [{**i.as_dict(), "path": f"{b.name}/{i.path}" if several else i.path}
+                for b in bundles for i in b.issues if i.level == level]
+    versions = sorted({str(b.version) for b in bundles})
     return {
-        "bundle": str(bundle.root), "okf_version": bundle.version, "conformant": bundle.conformant,
-        "concepts": len(bundle.concepts),
+        "bundle": ", ".join(str(b.root) for b in bundles),
+        "okf_version": versions[0] if len(versions) == 1 else ", ".join(versions),
+        "conformant": all(b.conformant for b in bundles),
+        "concepts": len(concepts),
         "sections": sum(len(c.sections) for c in concepts),
         "links": sum(len(c.links) for c in concepts),
         "types": dict(sorted({c.type: count(lambda x, t=c.type: x.type == t) for c in concepts}.items())),
@@ -705,6 +862,6 @@ def report(bundle: Bundle, now: dt.datetime | None = None) -> dict:
                   for tier in ("human-reviewed", "machine-confirmed", "unverified")},
         "status": {status: count(lambda c, s=status: c.status == s) for status in ("stable", "draft", "deprecated")},
         "stale": count(lambda c: c.is_stale(now)),
-        "errors": [i.as_dict() for i in bundle.errors],
-        "warnings": [i.as_dict() for i in bundle.issues if i.level == "warning"],
+        "errors": issues("error"),
+        "warnings": issues("warning"),
     }

@@ -217,7 +217,8 @@ function showPage(doc, page) {
   const meta = $("#reader-meta");
   meta.replaceChildren();
   metaRow(meta, "Description", doc.description);
-  metaRow(meta, "Statut", doc.status + (doc.superseded_by ? " · remplacé par " + findDocument(undefined, doc.superseded_by)?.concept : ""));
+  metaRow(meta, "Statut", doc.status + (doc.superseded_by ? " · remplacé par " + findDocument(undefined, doc.superseded_by)?.concept : "")
+    + ((doc.supersedes || []).length ? " · remplace " + doc.supersedes.map((id) => findDocument(undefined, id)?.concept).join(", ") : ""));
   metaRow(meta, "Confiance", doc.trust_tier + (doc.last_verified ? " · vérifié le " + date(doc.last_verified) : ""));
   metaRow(meta, "Fraîcheur", doc.stale_after ? (doc.stale ? "périmé depuis le " : "valable jusqu’au ") + date(doc.stale_after) : "sans échéance");
   metaRow(meta, "Rédaction", doc.generated?.by ? doc.generated.by + " · " + date(doc.generated.at) : undefined);
@@ -318,7 +319,10 @@ function renderDocuments(corpus) {
   }
   renderSummary(corpus.bundle);
   renderGraph(corpus.documents);
-  $("#corpus-status").textContent = "OKF v" + corpus.bundle.okf_version + " · indexé sans LLM le " + date(corpus.bundle.indexed_at);
+  const names = corpus.bundle.names || [];
+  $("#corpus-status").textContent = "OKF v" + corpus.bundle.okf_version
+    + (names.length > 1 ? " · " + names.length + " bundles (" + names.join(", ") + ")" : "")
+    + " · indexé sans LLM le " + date(corpus.bundle.indexed_at);
   for (const question of corpus.questions) questions.set(question.id, question);
   archives = corpus.archives || {};
   questionSelect.replaceChildren(...[...questions.values()].map((question) => {
@@ -342,7 +346,9 @@ function selectQuestion() {
 }
 
 function findDocument(name, id) {
-  if (id) return [...documents.values()].find((doc) => doc.id === id);
+  // An archived run may carry ids from an older index: fall back on the document name.
+  const byId = id && [...documents.values()].find((doc) => doc.id === id);
+  if (byId || !name) return byId || undefined;
   return documents.get(name) || [...documents.values()].find((doc) => doc.stored_name === name);
 }
 
@@ -491,7 +497,8 @@ function renderGraph(docs) {
   const nodeLayer = svgElement("g");
   for (const node of nodes) {
     const doc = node.doc;
-    const classes = ["node", FOLDER_CLASS[node.folder] || "other", ...doc.flags];
+    // Colour by the concept's own top directory: with several bundles, node.folder is the bundle.
+    const classes = ["node", FOLDER_CLASS[doc.path.split("/")[0]] || "other", ...doc.flags];
     const group = svgElement("g", { transform: `translate(${node.x},${node.y})`, tabindex: "0", role: "button",
       "aria-label": `${doc.title}, ${doc.type}, ${doc.status}` }, classes.join(" "));
     group.append(svgElement("circle", { r: radius + 7 }, "state"));

@@ -92,6 +92,48 @@ class FollowupTests(unittest.TestCase):
                 self.assertTrue(web.answer_issues({'citations': [reference]}, DOCUMENTS, {}))
 
 
+class HandedPagesTests(unittest.TestCase):
+    """Pages the check delivers as referral targets do not chain new obligations."""
+
+    def setUp(self):
+        with patch.dict(os.environ, {'DEMO_NOW': '2026-11-11T12:00:00Z'}):
+            bundles = okf.load_bundles([demo.ROOT / 'bundle', demo.ROOT / 'securite'])
+            self.documents = [web.document(b, c, okf.now_utc()) for b in bundles for c in b.concepts.values()]
+        by_concept = {d['concept']: d for d in self.documents}
+        self.secu = by_concept['securite:procedures/incident-securite']
+        self.p1, self.relais = by_concept['bundle:procedures/incident-p1'], by_concept['bundle:procedures/astreinte-relais']
+        by_id = {d['id']: d for d in self.documents}
+        self.client = Mock()
+        self.client.get_page_content.side_effect = lambda doc_id, spec: [
+            {'page_index': int(p), 'markdown': by_id[doc_id]['pages'][int(p)]} for p in spec.split(',')]
+
+    def evidence(self, *pairs):
+        return {(d['id'], page): {'doc_name': d['name'], 'page': page, 'text': d['pages'][page]} for d, page in pairs}
+
+    def test_whole_document_referral_does_not_cascade(self):
+        # The model read and cited the security Alerte section, whose link names the
+        # whole P1 procedure: the check delivers every P1 page, as referral targets.
+        found, handed = self.evidence((self.secu, 2), (self.secu, 3)), set()
+        list(web.retrieve_sources(self.client, {'citations': [citation(self.secu, 2, 1)]}, self.documents, found, 0, handed))
+        self.assertEqual(handed, {(self.p1['id'], page) for page in self.p1['pages']})
+        # Citing P1 page 2 from that delivery no longer requires the on-call relay it mentions.
+        answer = {'citations': [citation(self.secu, 2, 1), citation(self.p1, 3, 2), citation(self.p1, 2, 3)]}
+        self.assertEqual(web.answer_issues(answer, self.documents, found, set(found), handed), [])
+        # Had the model opened P1 page 2 itself, the referral would still be required.
+        issues = web.answer_issues(answer, self.documents, found, set(found), handed - {(self.p1['id'], 2)})
+        self.assertTrue(any('Suivez le renvoi' in i and self.relais['name'] in i for i in issues), issues)
+
+    def test_verifying_the_model_citation_is_not_a_hand_over(self):
+        # 'renvoi': the model cites P1 page 2 without opening it; the check verifies that
+        # citation, which stays the model's own choice, so the relay is still required.
+        found, handed = {}, set()
+        list(web.retrieve_sources(self.client, {'citations': [citation(self.p1, 2, 1)]}, self.documents, found, 0, handed))
+        self.assertNotIn((self.p1['id'], 2), handed)
+        self.assertIn((self.relais['id'], 2), handed)
+        issues = web.answer_issues({'citations': [citation(self.p1, 2, 1)]}, self.documents, found, set(found), handed)
+        self.assertTrue(any('Suivez le renvoi' in i and self.relais['name'] in i for i in issues), issues)
+
+
 class QueryFlowTests(unittest.TestCase):
     def run_query(self, client):
         with patch.object(web, 'configuration', return_value=('index-model', 'chat-model', 'key', 'http://localhost:11434/v1')), \

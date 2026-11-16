@@ -166,6 +166,17 @@ class DemoBundleTests(unittest.TestCase):
         self.assertFalse(mention.referral)
         self.assertTrue(self.link("procedures/escalade-p1-v1", "/procedures/astreinte-relais.md#relais").referral)
 
+    def test_referral_verbs_ignore_look_alike_words(self):
+        for sentence in ("Appliquer la section Relais.", "Suivez la procédure.", "Voir la fiche.",
+                         "Elle est remplacée par la section.", "See the playbook.", "This refers to the runbook."):
+            with self.subTest(sentence=sentence):
+                self.assertTrue(okf.REFERRAL.search(sentence))
+        for sentence in ("Le point suivant décrit le service.", "Le suivi est assuré par l'équipe.",
+                         "Le rapport mensuel liste les incidents.", "La consultation du tableau est libre.",
+                         "Le pouvoir de décision appartient au pilote.", "The following roles exist."):
+            with self.subTest(sentence=sentence):
+                self.assertIsNone(okf.REFERRAL.search(sentence))
+
     def test_agent_page_carries_lifecycle_links_and_sources(self):
         deprecated = self.bundle.concepts["procedures/escalade-p1-v1"]
         page = okf.agent_page(self.bundle, deprecated, deprecated.sections[0], NOW)
@@ -176,6 +187,19 @@ class DemoBundleTests(unittest.TestCase):
         self.assertIn("{→ procedures.astreinte-relais.md, page 2}", page)
         stale = self.bundle.concepts["procedures/communication-crise"]
         self.assertIn("PÉRIMÉ depuis le 2026-09-30", okf.agent_page(self.bundle, stale, stale.sections[0], NOW))
+
+    def test_replacement_announces_the_obsolete_rule_it_replaces(self):
+        relais = self.bundle.concepts["procedures/astreinte-relais"]
+        self.assertEqual([c.id for c in okf.replaced(self.bundle, relais)], ["procedures/escalade-p1-v1"])
+        line = okf.agent_page(self.bundle, relais, relais.sections[1], NOW).splitlines()[0]
+        self.assertIn("remplace procedures.escalade-p1-v1.md, OBSOLÈTE", line)
+        self.assertIn("15 minutes", line)
+        self.assertIn("directeur des opérations", line)
+        self.assertIn("remplace procedures.escalade-p1-v1.md", okf.description(self.bundle, relais, NOW))
+        self.assertEqual(okf.metadata(self.bundle, relais, NOW)["supersedes"], "procedures.escalade-p1-v1.md")
+        incident = self.bundle.concepts["procedures/incident-p1"]
+        self.assertEqual(okf.replaced(self.bundle, incident), [])
+        self.assertNotIn("remplace", okf.agent_page(self.bundle, incident, incident.sections[0], NOW).splitlines()[0])
 
     def test_metadata_is_flat_for_the_agent(self):
         concept = self.bundle.concepts["procedures/changement-urgent"]
@@ -215,6 +239,191 @@ class StoreTests(BundleTestCase):
         self.assertEqual(info["metadata"]["superseded_by"], "procedures.astreinte-relais.md")
         resolved = client.resolve_citations('Réponse <cite doc="procedures.astreinte-relais.md" page="2"/>.', doc_id=list(ids))
         self.assertEqual(resolved["citations"][0]["doc_id"], relais)
+
+    def two_bundles(self):
+        """Two copies of the demo bundle sharing every concept path; 'rh' has no services."""
+        for name in ("ops", "rh"):
+            shutil.copytree(ROOT / "bundle", self.root / name)
+        shutil.rmtree(self.root / "rh" / "services")
+        return [self.root / "ops", self.root / "rh"]
+
+    def test_several_bundles_are_namespaced_and_keep_links_inside(self):
+        ops, rh = okf.load_bundles(self.two_bundles())
+        incident_ops, incident_rh = ops.concepts["procedures/incident-p1"], rh.concepts["procedures/incident-p1"]
+        self.assertEqual((incident_ops.doc_name, incident_ops.key), ("ops.procedures.incident-p1.md", "ops:procedures/incident-p1"))
+        self.assertNotEqual(incident_ops.doc_id, incident_rh.doc_id)
+        page = okf.agent_page(ops, incident_ops, incident_ops.sections[1], NOW)
+        self.assertIn("{→ ops.procedures.astreinte-relais.md, page 2}", page)
+        # rh has no services/orion.md: the link is broken there, never resolved into ops.
+        orion = next(l for l in incident_rh.links if l.href == "/services/orion.md")
+        self.assertTrue(orion.broken)
+        self.assertFalse(next(l for l in incident_ops.links if l.href == "/services/orion.md").broken)
+        report = okf.report([ops, rh], NOW)
+        self.assertEqual(report["concepts"], 21)
+        self.assertTrue(any(w["path"].startswith("rh/") for w in report["warnings"]))
+        text = okf.full_text([ops, rh], rendered=True, now=NOW)
+        self.assertIn("DOCUMENT ops.procedures.incident-p1.md", text)
+        self.assertIn("DOCUMENT rh.procedures.incident-p1.md", text)
+        # A single bundle keeps unprefixed names: the evaluated scenario is unchanged.
+        alone = okf.load_bundles([self.root / "ops"])[0].concepts["procedures/incident-p1"]
+        self.assertEqual((alone.doc_name, alone.key), ("procedures.incident-p1.md", "procedures/incident-p1"))
+
+    def test_security_bundle_scenario(self):
+        """The shipped two-bundle scenario: conformant bundles, resolvable questions,
+        and the contradicting draft flagged as such to the agent."""
+        import json
+        import demo
+        bundles = okf.load_bundles([ROOT / "bundle", ROOT / "securite"])
+        for bundle in bundles:
+            self.assertTrue(bundle.conformant, bundle.errors)
+            self.assertEqual(self.messages(bundle, "warning"), [], bundle.name)
+        questions = json.loads((ROOT / "questions-multi.json").read_text(encoding="utf-8"))
+        self.assertEqual([q["id"] for q in questions], ["croise", "fuite", "contradiction", "premisse", "secret"])
+        for question in questions:
+            for source in question["sources"]:
+                demo.resolve_source(bundles, source)
+        securite = bundles[1]
+        draft, rule = securite.concepts["procedures/acces-urgence-astreinte"], securite.concepts["procedures/acces-urgence"]
+        self.assertEqual((draft.status, draft.trust_tier), ("draft", "unverified"))
+        self.assertEqual((rule.status, rule.trust_tier), ("stable", "human-reviewed"))
+        self.assertIn("BROUILLON", okf.agent_page(securite, draft, draft.sections[0], NOW))
+        self.assertIn("{→ securite.procedures.acces-urgence.md, page 1}", okf.agent_page(securite, draft, draft.sections[0], NOW))
+        # The security procedure hands the P1 frequency over to the operations bundle.
+        incident = securite.concepts["procedures/incident-securite"]
+        link = next(l for l in incident.links if l.href.endswith("#communication"))
+        self.assertEqual((link.bundle, link.target, link.target_page, link.referral), ("bundle", "procedures/incident-p1", 3, True))
+
+        # A cited draft that rewrites a rule in force ("modifierait…", not a referral
+        # verb) must still send the agent to that rule before it may answer.
+        import web
+        documents = [web.document(b, c, NOW) for b in bundles for c in b.concepts.values()]
+        by_concept = {d["concept"]: d for d in documents}
+        fake, in_force = by_concept["securite:procedures/acces-urgence-astreinte"], by_concept["securite:procedures/acces-urgence"]
+        self.assertEqual(web.followups(documents, {(fake["id"], 1)}), {(fake["id"], in_force["id"]): {1}})
+        resolved = {"citations": [{"doc_id": fake["id"], "page": 1}]}
+        evidence = {(fake["id"], 1): {}}
+        issues = web.answer_issues(resolved, documents, evidence)
+        self.assertTrue(any("brouillon non validé" in i and in_force["stored_name"] in i for i in issues), issues)
+        both = {"citations": [*resolved["citations"], {"doc_id": in_force["id"], "page": 1}]}
+        self.assertEqual(web.answer_issues(both, documents, {**evidence, (in_force["id"], 1): {}}), [])
+        # The operations draft only names a role: no extra reading is required,
+        # so the evaluated 'brouillon' question is unchanged.
+        urgent = by_concept["bundle:procedures/changement-urgent"]
+        self.assertEqual(web.followups(documents, {(urgent["id"], 1)}), {})
+        # Nothing in either bundle gives the emergency secret away.
+        self.assertNotRegex(okf.full_text(bundles), r"(?i)mot de passe\s*:")
+
+    def test_both_scenarios_together_without_bundle_prefix(self):
+        """The 8 operations questions and the 5 security ones over both bundles:
+        unprefixed sources resolve to the only bundle holding the concept."""
+        import os
+        import demo
+        bundles = okf.load_bundles([ROOT / "bundle", ROOT / "securite"])
+        concept, section = demo.resolve_source(bundles, "procedures/incident-p1#communication")
+        self.assertEqual((concept.key, section.page), ("bundle:procedures/incident-p1", 3))
+        concept, _ = demo.resolve_source(bundles, "procedures/acces-urgence#activation")
+        self.assertEqual(concept.key, "securite:procedures/acces-urgence")
+        files = os.pathsep.join(["questions.json", "questions-multi.json"])
+        with patch.dict(os.environ, {"DEMO_QUESTIONS": files}):
+            questions = demo.load_questions()
+        self.assertEqual(len(questions), 13)
+        for question in questions:
+            for source in question["sources"]:
+                demo.resolve_source(bundles, source)
+        with patch.dict(os.environ, {"DEMO_QUESTIONS": os.pathsep.join(["questions.json", "questions.json"])}), \
+             self.assertRaisesRegex(ValueError, "en double"):
+            demo.load_questions()
+
+    def test_links_between_bundles_are_explicit_and_followed_only_when_loaded(self):
+        ops, rh = self.two_bundles()
+        write(rh, "procedures/securite.md", """
+            ---
+            type: Playbook
+            title: Sécurité
+            ---
+            # Alerte
+
+            Pour la fréquence, appliquer la section Communication de la
+            [procédure P1](ops:/procedures/incident-p1.md#communication).
+            Mentions : [inconnue](ops:/procedures/inexistante.md), le [même bundle](rh:/roles/coordinateur-crise.md)
+            et [https](https://wiki.exemple.invalid/x).
+            """)
+        bundle_ops, bundle_rh = okf.load_bundles([ops, rh])
+        concept = bundle_rh.concepts["procedures/securite"]
+        cross, unknown, same = concept.links
+        target = bundle_ops.concepts["procedures/incident-p1"]
+        self.assertEqual((cross.bundle, cross.target, cross.target_page, cross.referral, cross.broken),
+                         ("ops", "procedures/incident-p1", 3, True, False))
+        self.assertIs(cross.concept, target)
+        self.assertTrue(unknown.broken)
+        self.assertFalse(unknown.referral)
+        self.assertIs(same.concept, bundle_rh.concepts["roles/coordinateur-crise"])
+        self.assertEqual(len(concept.links), 3)    # the https link stays external
+        messages = self.messages(bundle_rh, "warning")
+        self.assertIn("procedures/securite.md: lien sans cible dans le bundle « ops » : ops:/procedures/inexistante.md", messages)
+        page = okf.agent_page(bundle_rh, concept, concept.sections[0], NOW)
+        self.assertIn("{→ ops.procedures.incident-p1.md, page 3}", page)
+        self.assertIn("[OKF rh:procedures/securite ·", page)
+
+        # The web layer resolves the target to the other bundle's document,
+        # so the source checks require reading it once the section is cited.
+        import web
+        documents = [web.document(b, c, NOW) for b in (bundle_ops, bundle_rh) for c in b.concepts.values()]
+        securite = next(d for d in documents if d["concept"] == "rh:procedures/securite")
+        self.assertEqual(securite["links"][0]["target_doc"], target.doc_id)
+        self.assertEqual(web.followups(documents, {(securite["id"], 1)}), {(securite["id"], target.doc_id): {3}})
+
+        # Alone, the other bundle is not loaded: the link is reported and never followed.
+        alone = okf.load_bundle(rh)
+        link = alone.concepts["procedures/securite"].links[0]
+        self.assertTrue(link.broken)
+        self.assertIsNone(link.concept)
+        self.assertTrue(any("non chargé" in m for m in self.messages(alone, "warning")))
+        page = okf.agent_page(alone, alone.concepts["procedures/securite"], alone.concepts["procedures/securite"].sections[0], NOW)
+        self.assertNotIn("{→", page.split("procédure P1")[1].split("\n")[0])
+
+    def test_bundle_names_must_be_distinct(self):
+        for parent in ("a", "b"):
+            shutil.copytree(ROOT / "bundle", self.root / parent / "bundle")
+        with self.assertRaisesRegex(ValueError, "même nom"):
+            okf.load_bundles([self.root / "a" / "bundle", self.root / "b" / "bundle"])
+
+    def test_sync_of_one_bundle_never_touches_another(self):
+        from pageindex.local_store import DocStore
+        paths = self.two_bundles()
+        storage = self.root / ".pageindex"
+        both = okf.sync(okf.load_bundles(paths), storage, NOW)
+        self.assertEqual((len(both["docs"]), len(both["changed"])), (21, 21))
+        alone = okf.sync(okf.load_bundles(paths[:1]), storage, NOW)
+        self.assertEqual((len(alone["changed"]), alone["removed"]), (11, 0))     # names lose their prefix
+        metas = DocStore(str(storage)).list_metas()
+        self.assertEqual(len(metas), 21)
+        self.assertEqual(sum(m["name"].startswith("rh.") for m in metas), 10)
+        from pageindex import PageIndexClient
+        client = PageIndexClient(index={"model": "openai/none", "storage_path": str(storage)},
+                                 chat={"model": "openai/none"})
+        # Same unprefixed name in the store for ops, resolved within the queried ids only.
+        resolved = client.resolve_citations('<cite doc="procedures.astreinte-relais.md" page="2"/>',
+                                            doc_id=[d["doc_id"] for d in alone["docs"]])
+        self.assertEqual(resolved["citations"][0]["doc_id"], next(d["doc_id"] for d in alone["docs"]
+                                                                 if d["concept"] == "procedures/astreinte-relais"))
+
+    def test_legacy_documents_without_bundle_are_replaced(self):
+        from pageindex.local_store import DocStore
+        shutil.copytree(ROOT / "bundle", self.root / "bundle")
+        storage = self.root / ".pageindex"
+        store = DocStore(str(storage))
+        with store.lock():
+            # Written before bundles were recorded: same name, no okf_bundle, an id no concept has now.
+            store.save_document("okf-legacy", {"id": "okf-legacy", "name": "procedures.incident-p1.md",
+                                               "description": None, "status": "completed", "createdAt": "2026-11-01Z",
+                                               "pageNum": 1, "folderId": None, "mode": "okf",
+                                               "metadata": {"okf_fingerprint": "x"}},
+                                [], [{"page_index": 1, "markdown": "# Ancien"}])
+            self.assertIn("okf-legacy", {m["id"] for m in store.list_metas()})
+        result = okf.sync(okf.load_bundle(self.root / "bundle"), storage, NOW)
+        self.assertEqual(result["removed"], 1)
+        self.assertNotIn("okf-legacy", {m["id"] for m in store.list_metas()})
 
     def test_non_conformant_bundle_is_not_indexed(self):
         write(self.root, "bad.md", "# no frontmatter\n")

@@ -37,6 +37,14 @@ class QuestionTests(unittest.TestCase):
                 self.assertEqual(events[0]['case'], question['id'])
                 self.assertEqual(client.chat.call_args.args[0], [{'role': 'user', 'content': question['question']}])
 
+    def test_custom_questions_without_renvoi_get_a_default(self):
+        custom = [{'id': 'rh', 'question': 'Q rh ?'}, {'id': 'it', 'question': 'Q it ?'}]
+        with patch.object(web, 'load_questions', return_value=custom):
+            self.assertEqual(web.default_case(), 'rh')
+            self.assertEqual(web.selected_question(), 'Q rh ?')
+        with patch.object(web, 'load_questions', return_value=[*custom, {'id': 'renvoi', 'question': 'R ?'}]):
+            self.assertEqual(web.default_case(), 'renvoi')
+
     def test_worker_receives_selected_case(self):
         handler = web.Handler.__new__(web.Handler)
         handler.send_headers = Mock()
@@ -48,6 +56,28 @@ class QuestionTests(unittest.TestCase):
         with patch.object(web.subprocess, 'Popen', return_value=process) as popen:
             handler.stream_query('validation')
         self.assertEqual(popen.call_args.args[0][-2:], ['--case', 'validation'])
+
+    def test_worker_crash_is_reported_without_its_message(self):
+        handler = web.Handler.__new__(web.Handler)
+        handler.send_headers = Mock()
+        handler.log_message = Mock()
+        handler.wfile = io.BytesIO()
+
+        def crash(*args, stderr, **kwargs):
+            stderr.write(b'Traceback (most recent call last):\nImportError: secret-token in message\n')
+            process = MagicMock()
+            worker = process.__enter__.return_value
+            worker.stdout = io.BytesIO(b'')
+            worker.poll.return_value = 1
+            worker.wait.return_value = 1
+            return process
+
+        with patch.object(web.subprocess, 'Popen', side_effect=crash):
+            handler.stream_query('validation')
+        event = json.loads(handler.wfile.getvalue())
+        self.assertEqual(event['type'], 'error')
+        self.assertIn('code 1, ImportError', event['message'])
+        self.assertNotIn('secret-token', event['message'] + str(handler.log_message.call_args))
 
     def test_archives_are_scoped_to_the_selected_question(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(web, 'ROOT', Path(directory)), \
