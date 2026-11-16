@@ -1,49 +1,121 @@
 ﻿approche,repetition,cas,reponse_correcte,citation_pertinente,abstention_correcte,statut_okf_signale,duree_s,preuve,commentaire
-pageindex,1,nominal,,,,,,,NON EXÉCUTÉ
-pageindex,1,renvoi,,,,,,,NON EXÉCUTÉ
-pageindex,1,exception,,,,,,,NON EXÉCUTÉ
-pageindex,1,absent,,,,,,,NON EXÉCUTÉ
-pageindex,1,validation,,,,,,,NON EXÉCUTÉ
-pageindex,1,obsolete,,,,,,,NON EXÉCUTÉ
-pageindex,1,perime,,,,,,,NON EXÉCUTÉ
-pageindex,1,brouillon,,,,,,,NON EXÉCUTÉ
-pageindex,2,nominal,,,,,,,NON EXÉCUTÉ
-pageindex,2,renvoi,,,,,,,NON EXÉCUTÉ
-pageindex,2,exception,,,,,,,NON EXÉCUTÉ
-pageindex,2,absent,,,,,,,NON EXÉCUTÉ
-pageindex,2,validation,,,,,,,NON EXÉCUTÉ
-pageindex,2,obsolete,,,,,,,NON EXÉCUTÉ
-pageindex,2,perime,,,,,,,NON EXÉCUTÉ
-pageindex,2,brouillon,,,,,,,NON EXÉCUTÉ
-pageindex,3,nominal,,,,,,,NON EXÉCUTÉ
-pageindex,3,renvoi,,,,,,,NON EXÉCUTÉ
-pageindex,3,exception,,,,,,,NON EXÉCUTÉ
-pageindex,3,absent,,,,,,,NON EXÉCUTÉ
-pageindex,3,validation,,,,,,,NON EXÉCUTÉ
-pageindex,3,obsolete,,,,,,,NON EXÉCUTÉ
-pageindex,3,perime,,,,,,,NON EXÉCUTÉ
-pageindex,3,brouillon,,,,,,,NON EXÉCUTÉ
-contexte_complet,1,nominal,,,,,,,NON EXÉCUTÉ
-contexte_complet,1,renvoi,,,,,,,NON EXÉCUTÉ
-contexte_complet,1,exception,,,,,,,NON EXÉCUTÉ
-contexte_complet,1,absent,,,,,,,NON EXÉCUTÉ
-contexte_complet,1,validation,,,,,,,NON EXÉCUTÉ
-contexte_complet,1,obsolete,,,,,,,NON EXÉCUTÉ
-contexte_complet,1,perime,,,,,,,NON EXÉCUTÉ
-contexte_complet,1,brouillon,,,,,,,NON EXÉCUTÉ
-contexte_complet,2,nominal,,,,,,,NON EXÉCUTÉ
-contexte_complet,2,renvoi,,,,,,,NON EXÉCUTÉ
-contexte_complet,2,exception,,,,,,,NON EXÉCUTÉ
-contexte_complet,2,absent,,,,,,,NON EXÉCUTÉ
-contexte_complet,2,validation,,,,,,,NON EXÉCUTÉ
-contexte_complet,2,obsolete,,,,,,,NON EXÉCUTÉ
-contexte_complet,2,perime,,,,,,,NON EXÉCUTÉ
-contexte_complet,2,brouillon,,,,,,,NON EXÉCUTÉ
-contexte_complet,3,nominal,,,,,,,NON EXÉCUTÉ
-contexte_complet,3,renvoi,,,,,,,NON EXÉCUTÉ
-contexte_complet,3,exception,,,,,,,NON EXÉCUTÉ
-contexte_complet,3,absent,,,,,,,NON EXÉCUTÉ
-contexte_complet,3,validation,,,,,,,NON EXÉCUTÉ
-contexte_complet,3,obsolete,,,,,,,NON EXÉCUTÉ
-contexte_complet,3,perime,,,,,,,NON EXÉCUTÉ
-contexte_complet,3,brouillon,,,,,,,NON EXÉCUTÉ
+pageindex,1,nominal,oui,oui,s.o.,s.o.,28.4,runs/20261115-060108-99347-ask-nominal,
+pageindex,1,renvoi,oui,oui,s.o.,s.o.,29.8,runs/20261115-060139-36100-ask-renvoi,cite relais#relais et incident-p1#première-escalade
+pageindex,1,exception,oui,oui,s.o.,s.o.,32.4,runs/20261115-060212-981709-ask-exception,
+pageindex,1,absent,oui,oui,oui,s.o.,31.8,runs/20261115-060247-854215-ask-absent,relance : le modèle avait répondu sans lire de section
+pageindex,1,validation,oui,oui,s.o.,s.o.,31.9,runs/20261115-060322-812001-ask-validation,relance : le modèle avait répondu sans lire de section
+pageindex,1,obsolete,oui,oui,s.o.,oui,39.9,runs/20261115-060357-996420-ask-obsolete,"ancienne règle (15 min, directeur) déclarée obsolète, règle en vigueur donnée"
+pageindex,1,perime,oui,oui,s.o.,oui,32.5,runs/20261115-060439-189835-ask-perime,signale PÉRIMÉ en tête
+pageindex,1,brouillon,oui,oui,s.o.,oui,24.8,runs/20261115-060515-764541-ask-brouillon,signale BROUILLON
+pageindex,2,nominal,oui,oui,s.o.,s.o.,21.9,runs/20261115-060542-918983-ask-nominal,
+pageindex,2,renvoi,oui,partiel,s.o.,s.o.,27.2,runs/20261115-060607-441700-ask-renvoi,cite la destination (relais) mais pas la section qui porte le renvoi
+pageindex,2,exception,oui,oui,s.o.,s.o.,27.9,runs/20261115-060637-1218-ask-exception,
+pageindex,2,absent,oui,oui,oui,s.o.,21.3,runs/20261115-060707-81964-ask-absent,
+pageindex,2,validation,oui,oui,s.o.,s.o.,24.8,runs/20261115-060731-107576-ask-validation,
+pageindex,2,obsolete,oui,oui,s.o.,oui,43.0,runs/20261115-060759-728928-ask-obsolete,relance : le modèle avait répondu sans lire de section ; ancienne règle déclarée OBSOLÈTE
+pageindex,2,perime,oui,oui,s.o.,oui,34.2,runs/20261115-060844-989077-ask-perime,signale PÉRIMÉ en tête
+pageindex,2,brouillon,oui,oui,s.o.,oui,26.2,runs/20261115-060921-857838-ask-brouillon,signale BROUILLON non validé
+pageindex,3,nominal,oui,oui,s.o.,s.o.,22.2,runs/20261115-060950-387544-ask-nominal,
+pageindex,3,renvoi,oui,partiel,s.o.,s.o.,30.3,runs/20261115-061015-256138-ask-renvoi,cite relais seulement ; mentionne sans y être invité l'ancienne règle obsolète (effet de la ligne de statut)
+pageindex,3,exception,oui,oui,s.o.,s.o.,31.7,runs/20261115-061048-577968-ask-exception,
+pageindex,3,absent,oui,oui,oui,s.o.,29.8,runs/20261115-061122-491424-ask-absent,relance : le modèle avait répondu sans lire de section
+pageindex,3,validation,oui,oui,s.o.,s.o.,22.2,runs/20261115-061155-90298-ask-validation,
+pageindex,3,obsolete,oui,oui,s.o.,oui,34.9,runs/20261115-061220-335753-ask-obsolete,ancienne règle déclarée plus en vigueur
+pageindex,3,perime,oui,oui,s.o.,oui,54.0,runs/20261115-061257-688567-ask-perime,relance : le modèle avait répondu sans lire de section ; signale PÉRIMÉ
+pageindex,3,brouillon,oui,oui,s.o.,oui,47.8,runs/20261115-061354-281925-ask-brouillon,relance : le modèle avait lu roles/coordinateur-crise au lieu du concept ; signale brouillon
+contexte_complet,1,nominal,oui,oui,s.o.,s.o.,16.3,runs/20261115-055901-313213-baseline-nominal,cite incident-p1#communication
+contexte_complet,1,renvoi,oui,partiel,s.o.,s.o.,22.8,runs/20261115-055919-266899-baseline-renvoi,"cite Relais seulement, pas la section qui porte le renvoi"
+contexte_complet,1,exception,oui,oui,s.o.,s.o.,23.1,runs/20261115-055944-404214-baseline-exception,
+contexte_complet,1,absent,oui,partiel,oui,s.o.,15.6,runs/20261115-060009-8774-baseline-absent,"référence au document, sans section"
+contexte_complet,1,validation,oui,oui,s.o.,s.o.,13.2,runs/20261115-060027-693267-baseline-validation,cite la section Validation
+contexte_complet,1,obsolete,oui,oui,s.o.,oui,22.1,runs/20261115-060043-933911-baseline-obsolete,répond Non et désigne escalade-p1-v1 comme obsolète
+contexte_complet,1,perime,oui,oui,s.o.,non,11.6,runs/20261114-220249-99374-baseline-perime,aucune mention de la péremption
+contexte_complet,1,brouillon,oui,oui,s.o.,oui,13.5,runs/20261114-220321-316124-baseline-brouillon,signale BROUILLON
+contexte_complet,2,nominal,oui,oui,s.o.,s.o.,13.1,runs/20261114-220355-71985-baseline-nominal,
+contexte_complet,2,renvoi,oui,oui,s.o.,s.o.,13.0,runs/20261114-220453-25236-baseline-renvoi,cite Relais et Première escalade
+contexte_complet,2,exception,oui,oui,s.o.,s.o.,13.6,runs/20261114-220528-117149-baseline-exception,
+contexte_complet,2,absent,oui,oui,oui,s.o.,13.6,runs/20261114-220608-501040-baseline-absent,cite la section Contact
+contexte_complet,2,validation,oui,oui,s.o.,s.o.,10.8,runs/20261114-220643-671889-baseline-validation,
+contexte_complet,2,obsolete,oui,oui,s.o.,oui,16.9,runs/20261114-220720-120135-baseline-obsolete,"répond Non, règle obsolète identifiée"
+contexte_complet,2,perime,oui,oui,s.o.,non,13.9,runs/20261114-220803-431434-baseline-perime,aucune mention de la péremption
+contexte_complet,2,brouillon,oui,oui,s.o.,oui,13.6,runs/20261114-220842-58933-baseline-brouillon,signale BROUILLON
+contexte_complet,3,nominal,oui,partiel,s.o.,s.o.,13.2,runs/20261114-220929-976571-baseline-nominal,"référence au document, sans section"
+contexte_complet,3,renvoi,oui,partiel,s.o.,s.o.,15.9,runs/20261114-221030-481650-baseline-renvoi,"cite Relais seulement, pas la section qui porte le renvoi"
+contexte_complet,3,exception,oui,oui,s.o.,s.o.,13.4,runs/20261114-221111-579813-baseline-exception,
+contexte_complet,3,absent,oui,non,oui,s.o.,12.4,runs/20261114-221149-556528-baseline-absent,"cite la section Missions, l'information est dans Contact"
+contexte_complet,3,validation,oui,oui,s.o.,s.o.,12.5,runs/20261114-221227-620503-baseline-validation,
+contexte_complet,3,obsolete,oui,oui,s.o.,oui,17.0,runs/20261114-221310-464238-baseline-obsolete,"répond Non, cite escalade-p1-v1#statut et relais#relais"
+contexte_complet,3,perime,oui,oui,s.o.,non,12.8,runs/20261114-221356-226413-baseline-perime,aucune mention de la péremption
+contexte_complet,3,brouillon,oui,oui,s.o.,oui,13.6,runs/20261114-221439-603178-baseline-brouillon,signale BROUILLON
+pageindex_sans_relance,1,nominal,oui,oui,s.o.,s.o.,27.1,runs/20261115-063535-324952-ask-once-nominal,
+pageindex_sans_relance,1,renvoi,oui,partiel,s.o.,s.o.,32.5,runs/20261115-063647-183115-ask-once-renvoi,cite la destination (relais) seulement ; mentionne sans y être invité l'ancienne règle obsolète
+pageindex_sans_relance,1,exception,oui,oui,s.o.,s.o.,23.5,runs/20261115-063802-930073-ask-once-exception,"refusée par les contrôles : aucune section lue, réponse tirée des résumés de get_document_structure"
+pageindex_sans_relance,1,absent,oui,oui,oui,s.o.,19.3,runs/20261115-063911-403992-ask-once-absent,"refusée par les contrôles : aucune section lue, réponse tirée des résumés de get_document_structure"
+pageindex_sans_relance,1,validation,oui,oui,s.o.,s.o.,22.0,runs/20261115-064013-332104-ask-once-validation,
+pageindex_sans_relance,1,obsolete,oui,oui,s.o.,oui,34.0,runs/20261115-064118-637660-ask-once-obsolete,
+pageindex_sans_relance,1,perime,oui,oui,s.o.,oui,27.8,runs/20261115-064247-216033-ask-once-perime,"refusée par les contrôles : aucune section lue, réponse tirée des résumés de get_document_structure"
+pageindex_sans_relance,1,brouillon,oui,oui,s.o.,oui,26.9,runs/20261115-064406-438824-ask-once-brouillon,
+pageindex_sans_relance,2,nominal,oui,oui,s.o.,s.o.,24.5,runs/20261115-064524-266642-ask-once-nominal,"refusée par les contrôles : aucune section lue, réponse tirée des résumés de get_document_structure"
+pageindex_sans_relance,2,renvoi,oui,partiel,s.o.,s.o.,29.5,runs/20261115-064635-452590-ask-once-renvoi,cite la destination (relais) seulement ; mentionne sans y être invité l'ancienne règle obsolète
+pageindex_sans_relance,2,exception,oui,oui,s.o.,s.o.,31.6,runs/20261115-064755-613745-ask-once-exception,mentionne sans y être invité l'ancienne règle obsolète
+pageindex_sans_relance,2,absent,oui,oui,oui,s.o.,24.8,runs/20261115-064914-572016-ask-once-absent,"refusée par les contrôles : aucune section lue, réponse tirée des résumés de get_document_structure"
+pageindex_sans_relance,2,validation,oui,oui,s.o.,s.o.,23.1,runs/20261115-065022-161601-ask-once-validation,
+pageindex_sans_relance,2,obsolete,oui,oui,s.o.,oui,47.8,runs/20261115-065128-366177-ask-once-obsolete,
+pageindex_sans_relance,2,perime,oui,oui,s.o.,oui,30.8,runs/20261115-065308-827920-ask-once-perime,
+pageindex_sans_relance,2,brouillon,oui,oui,s.o.,oui,29.6,runs/20261115-065425-532149-ask-once-brouillon,
+pageindex_sans_relance,3,nominal,oui,oui,s.o.,s.o.,24.1,runs/20261115-065538-877642-ask-once-nominal,
+pageindex_sans_relance,3,renvoi,oui,oui,s.o.,s.o.,33.7,runs/20261115-065646-603861-ask-once-renvoi,
+pageindex_sans_relance,3,exception,oui,oui,s.o.,s.o.,28.2,runs/20261115-065814-854120-ask-once-exception,
+pageindex_sans_relance,3,absent,oui,oui,oui,s.o.,20.5,runs/20261115-065926-31806-ask-once-absent,"refusée par les contrôles : aucune section lue, réponse tirée des résumés de get_document_structure"
+pageindex_sans_relance,3,validation,oui,oui,s.o.,s.o.,26.0,runs/20261115-070022-391737-ask-once-validation,
+pageindex_sans_relance,3,obsolete,oui,oui,s.o.,oui,45.7,runs/20261115-070133-156541-ask-once-obsolete,
+pageindex_sans_relance,3,perime,oui,oui,s.o.,oui,56.1,runs/20261115-070328-563198-ask-once-perime,
+pageindex_sans_relance,3,brouillon,oui,oui,s.o.,oui,32.2,runs/20261115-070524-66275-ask-once-brouillon,
+contexte_brut,1,nominal,oui,oui,s.o.,s.o.,21.3,runs/20261115-063605-795789-baseline-nominal,
+contexte_brut,1,renvoi,oui,partiel,s.o.,s.o.,26.5,runs/20261115-063723-666432-baseline-renvoi,"cite relais et escalade-p1-v1, pas incident-p1#première-escalade ; mentionne sans y être invité l'ancienne règle obsolète"
+contexte_brut,1,exception,oui,oui,s.o.,s.o.,23.4,runs/20261115-063828-257524-baseline-exception,
+contexte_brut,1,absent,oui,oui,oui,s.o.,17.4,runs/20261115-063933-42975-baseline-absent,
+contexte_brut,1,validation,oui,oui,s.o.,s.o.,18.8,runs/20261115-064037-260954-baseline-validation,
+contexte_brut,1,obsolete,oui,oui,s.o.,oui,25.2,runs/20261115-064155-587843-baseline-obsolete,
+contexte_brut,1,perime,oui,oui,s.o.,non,18.8,runs/20261115-064317-294508-baseline-perime,aucune mention de la péremption
+contexte_brut,1,brouillon,oui,oui,s.o.,oui,20.2,runs/20261115-064435-794338-baseline-brouillon,
+contexte_brut,2,nominal,oui,oui,s.o.,s.o.,19.5,runs/20261115-064551-841011-baseline-nominal,
+contexte_brut,2,renvoi,oui,oui,s.o.,s.o.,25.1,runs/20261115-064707-690043-baseline-renvoi,mentionne sans y être invité l'ancienne règle obsolète
+contexte_brut,2,exception,oui,oui,s.o.,s.o.,21.7,runs/20261115-064829-439951-baseline-exception,
+contexte_brut,2,absent,oui,oui,oui,s.o.,20.8,runs/20261115-064941-283797-baseline-absent,
+contexte_brut,2,validation,oui,oui,s.o.,s.o.,20.7,runs/20261115-065047-186432-baseline-validation,
+contexte_brut,2,obsolete,oui,oui,s.o.,oui,22.2,runs/20261115-065219-261616-baseline-obsolete,
+contexte_brut,2,perime,oui,oui,s.o.,non,20.2,runs/20261115-065341-131341-baseline-perime,aucune mention de la péremption
+contexte_brut,2,brouillon,oui,oui,s.o.,oui,18.2,runs/20261115-065457-777939-baseline-brouillon,
+contexte_brut,3,nominal,oui,oui,s.o.,s.o.,20.6,runs/20261115-065604-954879-baseline-nominal,
+contexte_brut,3,renvoi,oui,oui,s.o.,s.o.,25.6,runs/20261115-065722-670196-baseline-renvoi,
+contexte_brut,3,exception,oui,oui,s.o.,s.o.,20.8,runs/20261115-065845-179452-baseline-exception,
+contexte_brut,3,absent,oui,oui,oui,s.o.,14.1,runs/20261115-065949-761332-baseline-absent,
+contexte_brut,3,validation,oui,oui,s.o.,s.o.,20.6,runs/20261115-070051-552593-baseline-validation,
+contexte_brut,3,obsolete,oui,oui,s.o.,oui,33.6,runs/20261115-070222-445998-baseline-obsolete,
+contexte_brut,3,perime,oui,oui,s.o.,non,24.9,runs/20261115-070428-271765-baseline-perime,aucune mention de la péremption
+contexte_brut,3,brouillon,oui,oui,s.o.,oui,24.5,runs/20261115-070600-966698-baseline-brouillon,
+contexte_okf,1,nominal,oui,oui,s.o.,s.o.,16.1,runs/20261115-063629-188123-baseline-okf-nominal,
+contexte_okf,1,renvoi,oui,non,s.o.,s.o.,8.6,runs/20261115-063751-75044-baseline-okf-renvoi,aucune balise <cite> (recopie l'annotation {→ …}) : refusée par les contrôles
+contexte_okf,1,exception,oui,oui,s.o.,s.o.,15.3,runs/20261115-063854-764510-baseline-okf-exception,
+contexte_okf,1,absent,oui,oui,oui,s.o.,18.8,runs/20261115-063952-2475-baseline-okf-absent,
+contexte_okf,1,validation,oui,oui,s.o.,s.o.,17.7,runs/20261115-064058-162415-baseline-okf-validation,
+contexte_okf,1,obsolete,oui,oui,s.o.,oui,22.9,runs/20261115-064222-969020-baseline-okf-obsolete,
+contexte_okf,1,perime,oui,oui,s.o.,oui,25.6,runs/20261115-064338-856861-baseline-okf-perime,
+contexte_okf,1,brouillon,oui,oui,s.o.,oui,24.4,runs/20261115-064457-647242-baseline-okf-brouillon,
+contexte_okf,2,nominal,oui,oui,s.o.,s.o.,20.6,runs/20261115-064612-219329-baseline-okf-nominal,
+contexte_okf,2,renvoi,oui,oui,s.o.,s.o.,19.0,runs/20261115-064734-497336-baseline-okf-renvoi,
+contexte_okf,2,exception,oui,oui,s.o.,s.o.,19.1,runs/20261115-064853-249410-baseline-okf-exception,
+contexte_okf,2,absent,oui,oui,oui,s.o.,16.0,runs/20261115-065004-363931-baseline-okf-absent,
+contexte_okf,2,validation,oui,oui,s.o.,s.o.,16.2,runs/20261115-065110-900801-baseline-okf-validation,
+contexte_okf,2,obsolete,oui,oui,s.o.,oui,22.7,runs/20261115-065243-288889-baseline-okf-obsolete,
+contexte_okf,2,perime,oui,oui,s.o.,oui,19.7,runs/20261115-065403-687047-baseline-okf-perime,
+contexte_okf,2,brouillon,oui,oui,s.o.,oui,18.4,runs/20261115-065517-415967-baseline-okf-brouillon,
+contexte_okf,3,nominal,oui,oui,s.o.,s.o.,17.1,runs/20261115-065627-424101-baseline-okf-nominal,
+contexte_okf,3,renvoi,oui,partiel,s.o.,s.o.,22.2,runs/20261115-065750-950610-baseline-okf-renvoi,cite relais seulement
+contexte_okf,3,exception,oui,oui,s.o.,s.o.,16.7,runs/20261115-065907-656468-baseline-okf-exception,
+contexte_okf,3,absent,oui,oui,oui,s.o.,15.1,runs/20261115-070005-919307-baseline-okf-absent,
+contexte_okf,3,validation,oui,oui,s.o.,s.o.,16.6,runs/20261115-070114-178657-baseline-okf-validation,
+contexte_okf,3,obsolete,oui,oui,s.o.,oui,26.5,runs/20261115-070259-27156-baseline-okf-obsolete,
+contexte_okf,3,perime,oui,oui,s.o.,oui,24.1,runs/20261115-070457-517654-baseline-okf-perime,
+contexte_okf,3,brouillon,oui,non,s.o.,oui,25.0,runs/20261115-070628-911954-baseline-okf-brouillon,"références en texte libre, sans balise <cite> : refusée par les contrôles"
