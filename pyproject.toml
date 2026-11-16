@@ -5,6 +5,8 @@ description = "Démonstrateur PageIndex : bundle OKF (Open Knowledge Format) de 
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "litellm>=1.105.7",
     "pageindex==0.5.3",
+    "python-dotenv>=1.2.4",
     "pyyaml>=6.0",
 ]
