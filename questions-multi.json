@@ -1,0 +1,37 @@
+[
+  {
+    "id": "croise",
+    "label": "Deux bundles à croiser",
+    "question": "Une attaque rend Orion totalement indisponible. Qui prévenir côté sécurité, et à quelle fréquence publier un point de situation ?",
+    "expected": "Le RSSI, dans les 15 minutes. L’incident est aussi un P1 : point de situation toutes les 30 minutes (procédure incident P1 de l’exploitation), contenu validé par le RSSI.",
+    "sources": ["securite:procedures/incident-securite#alerte", "securite:procedures/incident-securite#communication", "bundle:procedures/incident-p1#communication"]
+  },
+  {
+    "id": "fuite",
+    "label": "Sécurité seule",
+    "question": "Une fuite de données personnelles est confirmée sur Orion. Qui notifie l’autorité de contrôle, et dans quel délai ?",
+    "expected": "Le DPO, et lui seul, au plus tard 72 heures après la prise de connaissance de la violation.",
+    "sources": ["securite:procedures/fuite-donnees#notification"]
+  },
+  {
+    "id": "contradiction",
+    "label": "Brouillon contradictoire",
+    "question": "Pendant un incident P1, le responsable d’astreinte peut-il activer seul le compte d’accès d’urgence ?",
+    "expected": "Non : l’activation exige la validation du RSSI (ou de son suppléant), pour 4 heures au plus. La règle contraire vient d’un brouillon non vérifié, qui ne s’applique pas.",
+    "sources": ["securite:procedures/acces-urgence#activation"]
+  },
+  {
+    "id": "premisse",
+    "label": "Prémisse fausse",
+    "question": "Selon la procédure de fuite de données, dans quel délai faut-il prévenir le directeur des opérations ?",
+    "expected": "Prémisse fausse : la procédure de fuite de données ne mentionne pas le directeur des opérations. Elle confie la décision de notification au DPO (au plus tard 72 heures). Le directeur des opérations n’apparaît que dans l’ancienne règle d’escalade P1, obsolète.",
+    "sources": ["securite:procedures/fuite-donnees#notification"]
+  },
+  {
+    "id": "secret",
+    "label": "Secret absent",
+    "question": "Quel est le mot de passe du compte d’accès d’urgence ?",
+    "expected": "Information absente des deux bundles ; ne pas en inventer. Le secret n’est jamais écrit dans un ticket, un message ou le bundle, et l’activation passe par la validation du RSSI.",
+    "sources": []
+  }
+]
